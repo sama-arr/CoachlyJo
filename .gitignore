@@ -23,3 +23,6 @@ frontend/android/.gradle/
 frontend/android/local.properties
 .idea/
 *.iml
+
+# local-only notes with credentials
+*.local.md
