@@ -117,7 +117,7 @@ Future<void> startPackagePurchase(BuildContext context,
         final ext = (f.extension ?? '').toLowerCase();
         final mime = ext == 'png' ? 'image/png' : 'image/jpeg';
         try {
-          final res = await ApiClient.instance.post('/api/members/packages/request', {
+          await ApiClient.instance.post('/api/members/packages/request', {
             'packageDefId': pkg!['id'],
             'coachId': coach!['user_id'],
             'proof': {

@@ -97,14 +97,14 @@ def strip_code(src):
 
 # 1. balance
 for path in files:
-    code = strip_code(open(path).read())
+    code = strip_code(open(path, encoding='utf-8').read())
     for op, cl, name in [('{', '}', 'braces'), ('(', ')', 'parens'), ('[', ']', 'brackets')]:
         if code.count(op) != code.count(cl):
             errors.append(f'{path}: unbalanced {name} ({code.count(op)} vs {code.count(cl)})')
 
 # 2. relative imports resolve
 for path in files:
-    for m in re.finditer(r"import\s+'([^']+)'", open(path).read()):
+    for m in re.finditer(r"import\s+'([^']+)'", open(path, encoding='utf-8').read()):
         imp = m.group(1)
         if imp.startswith(('package:', 'dart:')):
             continue
@@ -115,7 +115,7 @@ for path in files:
 # 3. referenced classes exist
 defined = set()
 for path in files:
-    defined.update(re.findall(r'\bclass\s+([A-Za-z_]\w*)', open(path).read()))
+    defined.update(re.findall(r'\bclass\s+([A-Za-z_]\w*)', open(path, encoding='utf-8').read()))
 WATCHED = [
     'LinkText', 'StatCard', 'StatGrid', 'SimpleBarChart', 'RangePicker', 'ErrorRetry',
     'SettingsScreen', 'ApiClient', 'AuthState', 'ApiException', 'AppConfig', 'MemberHome',
@@ -127,16 +127,16 @@ WATCHED = [
     'PressableCard',
 ]
 for path in files:
-    src = open(path).read()
+    src = open(path, encoding='utf-8').read()
     for cls in WATCHED:
         if re.search(r'\b' + cls + r'\b', src) and cls not in defined:
             errors.append(f'{path}: references undefined class {cls}')
 
 # 4. package imports declared
 pubspec_path = os.path.join(root, 'pubspec.yaml')
-pubspec = open(pubspec_path).read() if os.path.exists(pubspec_path) else ''
+pubspec = open(pubspec_path, encoding='utf-8').read() if os.path.exists(pubspec_path) else ''
 for path in files:
-    for m in re.finditer(r"import\s+'package:([a-z_0-9]+)/", open(path).read()):
+    for m in re.finditer(r"import\s+'package:([a-z_0-9]+)/", open(path, encoding='utf-8').read()):
         pkg = m.group(1)
         if pkg in ('flutter', 'flutter_localizations'):
             continue
@@ -145,7 +145,7 @@ for path in files:
 
 # 5. StatefulWidget has State
 for path in files:
-    src = open(path).read()
+    src = open(path, encoding='utf-8').read()
     for m in re.finditer(r'class\s+(\w+)\s+extends\s+StatefulWidget', src):
         w = m.group(1)
         if f'State<{w}>' not in src:
@@ -154,7 +154,7 @@ for path in files:
 # 6. stale / deprecated usage
 STALE = ['_addTemplate', 'slot-templates', 'slot_templates', 'withOpacity(']
 for path in files:
-    src = open(path).read()
+    src = open(path, encoding='utf-8').read()
     for pat in STALE:
         if pat in src:
             errors.append(f'{path}: stale or deprecated usage: {pat}')
@@ -162,7 +162,7 @@ for path in files:
 # 7. const contexts containing runtime i18n calls (will not compile)
 I18N = r'\b(tr|fmtDate|pkgName|noteBody|trStatus)\('
 for path in files:
-    src = open(path).read()
+    src = open(path, encoding='utf-8').read()
     for m in re.finditer(r'const\s*[\[\(]', src):
         start = m.end() - 1
         depth, i = 0, start
@@ -180,7 +180,7 @@ for path in files:
 
 # 8. unused private methods
 for path in files:
-    src = open(path).read()
+    src = open(path, encoding='utf-8').read()
     for m in re.finditer(r'\n\s*(?:Future<[^>]*>|void|Widget|String|int|bool|double)\s+(_[A-Za-z]\w*)\s*\(', src):
         name = m.group(1)
         if len(re.findall(r'\b' + re.escape(name) + r'\b', src)) < 2:
@@ -193,10 +193,10 @@ if os.path.isdir(backend_src):
     for dirpath, _, names in os.walk(backend_src):
         for n in names:
             if n.endswith('.js'):
-                backend += open(os.path.join(dirpath, n)).read()
+                backend += open(os.path.join(dirpath, n), encoding='utf-8').read()
 api_paths = set()
 for path in files:
-    src = open(path).read()
+    src = open(path, encoding='utf-8').read()
     for m in re.finditer(r"'(/api/[a-z\-/]+?)[?']", src):
         api_paths.add(m.group(1))
     for m in re.finditer(r"'(/api/[a-z\-/]*?)\$\{?", src):

@@ -74,20 +74,26 @@ def main():
 
     # Android adaptive layers.
     marks = extract_marks(icon)
-    bbox = marks.getbbox()
-    marks = marks.crop(bbox)
-    # Fit the marks inside the 66% safe zone with a little breathing room.
-    target = int(SIZE * 0.58)
-    scale = target / max(marks.size)
-    marks = marks.resize((int(marks.width * scale), int(marks.height * scale)), Image.LANCZOS)
-    fg = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
-    fg.paste(marks, ((SIZE - marks.width) // 2, (SIZE - marks.height) // 2), marks)
-    fg.save(os.path.join(OUT, "adaptive-foreground.png"))
+    marks = marks.crop(marks.getbbox())
+
+    def centred(mark_fraction):
+        """Marks scaled so their longest side is `mark_fraction` of the canvas, centred."""
+        scale = SIZE * mark_fraction / max(marks.size)
+        m = marks.resize((int(marks.width * scale), int(marks.height * scale)), Image.LANCZOS)
+        layer = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
+        layer.paste(m, ((SIZE - m.width) // 2, (SIZE - m.height) // 2), m)
+        return layer
+
+    # flutter_launcher_icons wraps the foreground in a 16% inset, and launchers
+    # only show the central 66.7% of an adaptive icon. 0.69 * 0.68 / 0.667 ≈ 70%
+    # of the visible circle, which keeps the "JO" badge corners inside the mask.
+    centred(0.69).save(os.path.join(OUT, "adaptive-foreground.png"))
     bg.save(os.path.join(OUT, "adaptive-background.png"))
 
-    # Play listing icon: full-bleed composite, 512x512.
+    # Play listing icon: full-bleed composite (Play applies its own mask), 512x512.
     play = bg.copy().convert("RGBA")
-    play.paste(fg, (0, 0), fg)
+    fg_play = centred(0.62)
+    play.paste(fg_play, (0, 0), fg_play)
     play.convert("RGB").resize((512, 512), Image.LANCZOS).save(os.path.join(OUT, "play-icon-512.png"))
 
     # Feature graphic 1024x500.

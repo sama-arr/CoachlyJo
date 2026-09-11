@@ -9,7 +9,6 @@ import '../core/theme_v0_13.dart';
 import '../core/motion_v0_13.dart';
 import 'account_v0_13.dart';
 import '../core/i18n_v0_13.dart';
-import 'package:provider/provider.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});

@@ -297,7 +297,6 @@ const Map<String, String> _ar = {
   'h ago': ' س',
   'd ago': ' ي',
   'Archive': 'أرشفة',
-  'Delete': 'حذف',
   'Legal': 'المستندات القانونية',
   'Privacy Policy': 'سياسة الخصوصية',
   'Terms of Service': 'شروط الاستخدام',

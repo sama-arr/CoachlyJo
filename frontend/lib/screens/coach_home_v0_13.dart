@@ -216,7 +216,6 @@ class _RequestsTabState extends State<_RequestsTab> {
         ]),
       );
     }
-    final df = DateFormat('EEE d MMM, h:mm a');
     return RefreshIndicator(onRefresh: _load, child: ListView(children: [
       HeroPanel(
         title: tr(context, 'Requests'),
