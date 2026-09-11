@@ -1,7 +1,7 @@
 name: fitness_platform
 description: CoachlyJo — fitness coaching platform for Jordan.
 publish_to: 'none'
-version: 0.13.0+13
+version: 1.0.0+1
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -20,6 +20,18 @@ dependencies:
 
 dev_dependencies:
   flutter_lints: ^4.0.0
+  flutter_launcher_icons: ^0.14.1
 
 flutter:
   uses-material-design: true
+
+# Launcher icons — regenerate with:  dart run flutter_launcher_icons
+# Source assets come from  python tools/make_store_assets.py  (repo root).
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "../branding/coachlyjo-icon-1024.png"
+  adaptive_icon_foreground: "../branding/generated/adaptive-foreground.png"
+  adaptive_icon_background: "../branding/generated/adaptive-background.png"
+  image_path_ios: "../branding/generated/icon-ios-1024.png"
+  remove_alpha_ios: true

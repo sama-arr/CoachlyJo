@@ -1,5 +1,25 @@
 node_modules/
 .env
+.env.*
+!.env.example
+env
 *.log
 .dart_tool/
 build/
+
+# Android release signing — never commit
+frontend/android/key.properties
+*.jks
+*.keystore
+
+# Flutter / IDE
+frontend/.flutter-plugins
+frontend/.flutter-plugins-dependencies
+frontend/.packages
+frontend/ios/Pods/
+frontend/ios/.symlinks/
+frontend/ios/Flutter/ephemeral/
+frontend/android/.gradle/
+frontend/android/local.properties
+.idea/
+*.iml

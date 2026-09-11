@@ -1,0 +1,57 @@
+# Render Blueprint for the CoachlyJo API.
+# Render → New → Blueprint → select this repo. Secrets marked sync:false are
+# prompted for in the dashboard and never stored in git.
+services:
+  - type: web
+    name: coachlyjo-api
+    runtime: node
+    rootDir: backend
+    plan: free            # upgrade to "starter" before store review so it never sleeps
+    region: frankfurt     # closest Render region to Jordan
+    buildCommand: npm ci
+    startCommand: node src/server_v0_13.js
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: OTP_DEV_MODE
+        value: "false"
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      - key: PGPORT
+        value: "5432"
+      - key: PGSSLMODE
+        value: require
+      # --- paste from Neon ---
+      - key: PGHOST
+        sync: false
+      - key: PGDATABASE
+        sync: false
+      - key: PGUSER
+        sync: false
+      - key: PGPASSWORD
+        sync: false
+      # --- generate with: openssl rand -base64 48 ---
+      - key: JWT_SECRET
+        sync: false
+      # --- SMTP (required: reviewers test "forgot password") ---
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_FROM
+        sync: false
+      # --- optional ---
+      - key: CORS_ORIGINS
+        sync: false
+      - key: ZOOM_ACCOUNT_ID
+        sync: false
+      - key: ZOOM_CLIENT_ID
+        sync: false
+      - key: ZOOM_CLIENT_SECRET
+        sync: false

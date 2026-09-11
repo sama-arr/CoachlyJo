@@ -8,6 +8,30 @@ Tick the boxes as you go.
 
 ---
 
+> ## No Mac? Read this first (added 2026-09-11)
+>
+> Everything marked "on the Mac" in Phase 2 and 5 can run on **Codemagic** instead
+> (free macOS build minutes, no local Xcode). The repo now includes:
+>
+> - `render.yaml` — Render Blueprint: **New → Blueprint** on render.com, pick this
+>   repo, paste the secrets it prompts for. Replaces Phase 1.3 by hand.
+> - `codemagic.yaml` — two workflows: `android-release` (signed `.aab` → Play internal
+>   track) and `ios-release` (signed `.ipa` → TestFlight). The one-time UI setup
+>   (keystore, App Store Connect key, `API_BASE_URL` variable) is documented at the
+>   top of that file. **The keystore Codemagic generates is your upload key — download
+>   it and back it up in two places** (see 2.3).
+> - `tools/make_store_assets.py` — generates the Play icon, feature graphic, adaptive
+>   icon layers and the alpha-free iOS icon into `branding/generated/`.
+> - `frontend/android/` and `frontend/ios/` are now committed (Phase 2.1 done),
+>   bundle ID `com.coachlyjo.app`, icons wired via `flutter_launcher_icons`.
+>
+> Phase 1.4 (migrate/seed) was already run against the Neon project `coachlyjo`;
+> `/health/schema` reports v13. Skip 2.1–2.3, and in 2.4 / 5.2 read
+> "start the Codemagic workflow" wherever it says "build on the Mac".
+> Codemagic uploads to TestFlight itself, so Transporter is not needed.
+
+---
+
 # PHASE 0 — Start the slow things today (30 minutes)
 
 Three things have waiting periods. Start them before anything else, then come back
