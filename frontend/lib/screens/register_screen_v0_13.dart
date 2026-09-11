@@ -1,0 +1,288 @@
+import 'dart:convert';
+import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
+import '../core/api_v0_13.dart';
+import '../core/i18n_v0_13.dart';
+import '../core/auth_state_v0_13.dart';
+import '../core/countries_v0_13.dart';
+
+class RegisterScreen extends StatefulWidget {
+  const RegisterScreen({super.key});
+  @override
+  State<RegisterScreen> createState() => _RegisterScreenState();
+}
+
+class _RegisterScreenState extends State<RegisterScreen> {
+  bool isCoach = false;
+  final _email = TextEditingController();
+  final _phone = TextEditingController();
+  final _password = TextEditingController();
+  final _first = TextEditingController();
+  final _last = TextEditingController();
+  final _birthPlace = TextEditingController();
+
+  DateTime? _dob;                 // calendar (date only), items 10,11
+  String? _nationality;           // country dropdown
+  String? _location;              // admin-configured dropdown
+
+  List<dynamic> _locations = [];
+  List<dynamic> _questions = [];
+  final Map<String, dynamic> _answers = {};
+  final List<Map<String, dynamic>> _docs = [];
+
+  bool _busy = false;
+  String? _error;
+  String? _userId;
+  String? _devOtp;
+  final _otp = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRefData();
+  }
+
+  Future<void> _loadRefData() async {
+    try { _locations = await ApiClient.instance.get('/api/auth/locations'); } catch (_) {}
+    try { _questions = await ApiClient.instance.get('/api/auth/questionnaire'); } catch (_) {}
+    if (mounted) setState(() {});
+  }
+
+  bool _validEmail(String e) => RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(e);
+  bool _validPhone(String p) => RegExp(r'^0\d{9}$').hasMatch(p); // 07XXXXXXXX (10 digits)
+
+  Future<void> _pickDob() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime(now.year - 25),
+      firstDate: DateTime(now.year - 100),
+      lastDate: now,
+      helpText: 'Select date of birth',
+    );
+    if (picked != null) setState(() => _dob = picked);
+  }
+
+  Future<void> _pickDocument(String docType) async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png'],
+      withData: true,
+    );
+    if (result == null || result.files.isEmpty) return;
+    final f = result.files.first;
+    if (f.bytes == null) return;
+    final ext = (f.extension ?? '').toLowerCase();
+    const mimeByExt = {
+      'pdf': 'application/pdf', 'doc': 'application/msword',
+      'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png',
+    };
+    setState(() {
+      _docs.removeWhere((d) => d['docType'] == docType);
+      _docs.add({'docType': docType, 'fileName': f.name, 'mimeType': mimeByExt[ext] ?? 'application/octet-stream', 'dataBase64': base64Encode(f.bytes!)});
+    });
+  }
+
+  String? _validate() {
+    if (_first.text.trim().isEmpty || _last.text.trim().isEmpty) return 'First and last name are required';
+    if (!_validEmail(_email.text.trim())) return 'Enter a valid email (example@abc.com)';
+    if (!_validPhone(_phone.text.trim())) return 'Phone must be 10 digits starting with 0 (e.g. 0791234567)';
+    if (_password.text.length < 8) return 'Password must be at least 8 characters';
+    if (_dob == null) return 'Please select your date of birth';
+    if (_nationality == null) return 'Please select your nationality';
+    if (isCoach && _nationality == null) return 'Please select your nationality';
+    return null;
+  }
+
+  Future<void> _register() async {
+    final v = _validate();
+    if (v != null) { setState(() => _error = v); return; }
+    setState(() { _busy = true; _error = null; });
+    try {
+      final path = isCoach ? '/api/auth/register/coach' : '/api/auth/register/member';
+      final dobStr = DateFormat('yyyy-MM-dd').format(_dob!);
+      final body = {
+        'email': _email.text.trim(),
+        'phone': _phone.text.trim(),
+        'password': _password.text,
+        'firstName': _first.text.trim(),
+        'lastName': _last.text.trim(),
+        'dateOfBirth': dobStr,
+        'nationality': _nationality,
+        'birthPlace': _birthPlace.text.trim(),
+        'location': _location,
+        if (isCoach) 'documents': _docs,
+        if (!isCoach) 'assessment': _answers,
+      };
+      final res = await ApiClient.instance.post(path, body);
+      setState(() { _userId = res['user']['id']; _devOtp = res['devOtp']?.toString(); });
+    } on ApiException catch (e) {
+      setState(() => _error = e.message);
+    } catch (_) {
+      setState(() => _error = 'Cannot reach server. Check API_BASE_URL.');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _verifyAndLogin() async {
+    setState(() { _busy = true; _error = null; });
+    try {
+      await ApiClient.instance.post('/api/auth/verify', {'userId': _userId, 'code': _otp.text.trim(), 'channel': 'phone'});
+      await context.read<AuthState>().login(_email.text.trim(), _password.text);
+      if (mounted) Navigator.popUntil(context, (r) => r.isFirst);
+    } on ApiException catch (e) {
+      setState(() => _error = e.message);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final verifying = _userId != null;
+    return Scaffold(
+      appBar: AppBar(title: Text(verifying ? 'Verify' : 'Register')),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 480),
+          child: verifying ? _verifyForm() : _registerForm()),
+      ),
+    );
+  }
+
+  Widget _registerForm() {
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      SegmentedButton<bool>(
+        segments: [ButtonSegment(value: false, label: Text(tr(context, 'Member'))), ButtonSegment(value: true, label: Text(tr(context, 'Coach')))],
+        selected: {isCoach},
+        onSelectionChanged: (s) => setState(() => isCoach = s.first),
+      ),
+      const SizedBox(height: 16),
+      _f(_first, 'First name'),
+      _f(_last, 'Last name'),
+      _f(_email, 'Email', keyboard: TextInputType.emailAddress),
+      _f(_phone, 'Phone (07XXXXXXXX)', keyboard: TextInputType.phone),
+      _f(_password, 'Password (min 8)', obscure: true),
+      _dobField(),
+      _nationalityField(),
+      _f(_birthPlace, 'Birth place'),
+      _locationField(),
+      if (!isCoach) ..._questionFields(),
+      if (isCoach) ..._coachDocs(),
+      if (_error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
+      const SizedBox(height: 16),
+      FilledButton(onPressed: _busy ? null : _register, child: _busy
+        ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2)) : Text(tr(context, 'Create account'))),
+    ]);
+  }
+
+  Widget _dobField() => Padding(
+    padding: const EdgeInsets.only(bottom: 12),
+    child: InkWell(
+      onTap: _pickDob,
+      child: InputDecorator(
+        decoration: InputDecoration(labelText: tr(context, 'Date of birth'), border: OutlineInputBorder(), suffixIcon: Icon(Icons.calendar_today)),
+        child: Text(_dob == null ? 'Tap to select' : DateFormat('d MMM yyyy').format(_dob!)),
+      ),
+    ),
+  );
+
+  Widget _nationalityField() => Padding(
+    padding: const EdgeInsets.only(bottom: 12),
+    child: DropdownButtonFormField<String>(
+      isExpanded: true,
+      value: _nationality,
+      decoration: InputDecoration(labelText: tr(context, 'Nationality'), border: OutlineInputBorder()),
+      items: kCountries.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+      onChanged: (v) => setState(() => _nationality = v),
+    ),
+  );
+
+  Widget _locationField() => Padding(
+    padding: const EdgeInsets.only(bottom: 12),
+    child: DropdownButtonFormField<String>(
+      isExpanded: true,
+      value: _location,
+      decoration: InputDecoration(labelText: tr(context, 'Location (city / area)'), border: OutlineInputBorder()),
+      items: _locations.map<DropdownMenuItem<String>>((l) => DropdownMenuItem(value: l['name_en'].toString(), child: Text(l['name_en'].toString()))).toList(),
+      onChanged: (v) => setState(() => _location = v),
+    ),
+  );
+
+  List<Widget> _questionFields() {
+    if (_questions.isEmpty) return [];
+    return [
+      Align(alignment: Alignment.centerLeft, child: Text(tr(context, 'A few quick questions'), style: Theme.of(context).textTheme.titleSmall)),
+      const SizedBox(height: 4),
+      ..._questions.map<Widget>((q) => _questionField(q)),
+    ];
+  }
+
+  Widget _questionField(Map q) {
+    final key = q['key'];
+    final label = q['label_en'] + (q['required'] == true ? ' *' : '');
+    switch (q['input_type']) {
+      case 'dropdown':
+        final opts = (q['options'] as List?) ?? [];
+        return Padding(padding: const EdgeInsets.only(bottom: 12), child: DropdownButtonFormField<String>(
+          isExpanded: true,
+          decoration: InputDecoration(labelText: label, border: const OutlineInputBorder()),
+          items: opts.map<DropdownMenuItem<String>>((o) => DropdownMenuItem(value: o.toString(), child: Text(o.toString()))).toList(),
+          onChanged: (v) => _answers[key] = v,
+        ));
+      case 'number':
+        return Padding(padding: const EdgeInsets.only(bottom: 12), child: TextField(
+          keyboardType: TextInputType.number,
+          decoration: InputDecoration(labelText: label, border: const OutlineInputBorder()),
+          onChanged: (v) => _answers[key] = num.tryParse(v),
+        ));
+      default:
+        return Padding(padding: const EdgeInsets.only(bottom: 12), child: TextField(
+          decoration: InputDecoration(labelText: label, border: const OutlineInputBorder()),
+          onChanged: (v) => _answers[key] = v,
+        ));
+    }
+  }
+
+  List<Widget> _coachDocs() {
+    const docTypes = {
+      'degree_certificate': "Bachelor's Degree",
+      'additional_certification': 'Additional Certification',
+      'experience_proof': 'Proof of 2+ years experience',
+    };
+    return [
+      Align(alignment: Alignment.centerLeft, child: Text(tr(context, 'Documents (pdf, doc, docx, jpg, png)'), style: Theme.of(context).textTheme.titleSmall)),
+      const SizedBox(height: 4),
+      ...docTypes.entries.map((e) {
+        final picked = _docs.firstWhere((d) => d['docType'] == e.key, orElse: () => {});
+        return Card(child: ListTile(
+          dense: true, title: Text(e.value),
+          subtitle: picked.isEmpty ? Text(tr(context, 'No file selected')) : Text(picked['fileName'], maxLines: 1, overflow: TextOverflow.ellipsis),
+          trailing: TextButton.icon(onPressed: () => _pickDocument(e.key), icon: const Icon(Icons.upload_file), label: Text(tr(context, 'Choose'))),
+        ));
+      }),
+      const Padding(padding: EdgeInsets.only(top: 8), child: Text('You will be visible once an admin approves your account.', style: TextStyle(fontStyle: FontStyle.italic))),
+    ];
+  }
+
+  Widget _verifyForm() {
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Text(tr(context, 'Enter the verification code sent to your phone.')),
+      if (_devOtp != null) Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text('DEV code: $_devOtp', style: const TextStyle(fontWeight: FontWeight.bold))),
+      _f(_otp, 'OTP code'),
+      if (_error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
+      const SizedBox(height: 16),
+      FilledButton(onPressed: _busy ? null : _verifyAndLogin, child: Text(tr(context, 'Verify & continue'))),
+    ]);
+  }
+
+  Widget _f(TextEditingController c, String label, {bool obscure = false, TextInputType? keyboard}) => Padding(
+    padding: const EdgeInsets.only(bottom: 12),
+    child: TextField(controller: c, obscureText: obscure, keyboardType: keyboard,
+      decoration: InputDecoration(labelText: label, border: const OutlineInputBorder())),
+  );
+}
