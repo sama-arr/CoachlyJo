@@ -36,24 +36,60 @@ router.get('/coaches/:coachId/profile', authenticate, async (req, res) => {
   res.json({ coach: c.rows[0], reviews: reviews.rows });
 });
 
-// Available upcoming sessions for a coach (spec §2.7).
+// Available upcoming sessions for a coach.
+// If the member has a usable active package with this coach,
+// only show sessions that match the package mode:
+// online package -> online sessions only
+// in-person package -> in-person sessions only.
 router.get('/coaches/:coachId/sessions', authenticate, async (req, res) => {
-  // (v0.6 item 4) Sessions with a PENDING, ACCEPTED or COMPLETED booking are
-  // hidden from members entirely — with 1-on-1 sessions a pending request
-  // already claims the slot (two members must not request the same time), and
-  // a completed one has consumed it.
+  const coachId = req.params.coachId;
+
+  // Find the member's currently usable package with this coach.
+  const pkg = await pool.query(
+    `SELECT mode
+       FROM member_packages
+      WHERE member_id = $1
+        AND coach_id = $2
+        AND status = 'active'
+        AND (expires_at IS NULL OR expires_at > now())
+        AND (classes_total - classes_consumed - classes_pending) > 0
+      ORDER BY is_single DESC, expires_at ASC NULLS LAST
+      LIMIT 1`,
+    [req.user.id, coachId]
+  );
+
+  // If there is no usable package yet, show both session types.
+  // Once a package is active, only show the matching delivery mode.
+  const packageMode = pkg.rowCount > 0 ? pkg.rows[0].mode : null;
+
   const r = await pool.query(
     `SELECT cs.*,
-            (SELECT COUNT(*) FROM bookings b WHERE b.session_id=cs.id AND b.status IN ('pending','accepted','completed')) AS booked
+            (
+              SELECT COUNT(*)
+                FROM bookings b
+               WHERE b.session_id = cs.id
+                 AND b.status IN ('pending', 'accepted', 'completed')
+            ) AS booked
        FROM coach_sessions cs
-      WHERE cs.coach_id=$1 AND cs.start_at > now()
-        AND NOT EXISTS (SELECT 1 FROM bookings b
-                         WHERE b.session_id=cs.id AND b.status IN ('pending','accepted','completed'))
+      WHERE cs.coach_id = $1
+        AND cs.start_at > now()
+        AND ($2::text IS NULL OR cs.delivery::text = $2::text)
+        AND NOT EXISTS (
+              SELECT 1
+                FROM bookings b
+               WHERE b.session_id = cs.id
+                 AND b.status IN ('pending', 'accepted', 'completed')
+            )
       ORDER BY cs.start_at`,
-    [req.params.coachId]
+    [coachId, packageMode]
   );
-  // expose remaining capacity
-  res.json(r.rows.map((s) => ({ ...s, seats_left: s.capacity - Number(s.booked) })));
+
+  res.json(
+    r.rows.map((s) => ({
+      ...s,
+      seats_left: s.capacity - Number(s.booked),
+    }))
+  );
 });
 
 // The catalogue of packages the member can request (spec §9.1) — split by mode (item 8).

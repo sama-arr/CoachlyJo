@@ -23,24 +23,7 @@ router.post('/', authenticate, requireRole('member'), async (req, res) => {
     // For online sessions, create the Zoom meeting and attach it (spec §11).
     // v0.5: passes real meeting details (topic, start, duration) for the live
     // Zoom API; without credentials a placeholder is generated (see service).
-    const s = await pool.query(
-      `SELECT cs.delivery, cs.zoom_join_url, cs.start_at, cs.end_at,
-              cp.first_name AS coach_first, cp.last_name AS coach_last
-         FROM coach_sessions cs JOIN coach_profiles cp ON cp.user_id=cs.coach_id
-        WHERE cs.id=$1`, [sessionId]);
-    if (s.rows[0].delivery === 'online' && !s.rows[0].zoom_join_url) {
-      const row = s.rows[0];
-      const durationMinutes = Math.max(15, Math.round((new Date(row.end_at) - new Date(row.start_at)) / 60000));
-      const link = await generateZoomLink(sessionId, {
-        topic: `Fitness session with ${row.coach_first} ${row.coach_last}`,
-        startAt: row.start_at,
-        durationMinutes,
-      });
-      await pool.query(
-        `UPDATE coach_sessions SET zoom_meeting_id=$2, zoom_join_url=$3, zoom_start_url=$4 WHERE id=$1`,
-        [sessionId, link.meetingId, link.joinUrl, link.startUrl]
-      );
-    }
+
     // (v0.11) Tell the coach a request is waiting.
     const info = await pool.query(
       `SELECT cs.coach_id, cs.start_at, mp.first_name, mp.last_name
@@ -64,34 +47,138 @@ router.post('/', authenticate, requireRole('member'), async (req, res) => {
 });
 
 // Coach accepts or rejects (spec §6.3, §6.4).
-router.post('/:id/decision', authenticate, requireRole('coach'), async (req, res) => {
-  const { accept, rejectionReason } = req.body || {};
-  try {
-    const b = await svc.coachDecision({ bookingId: req.params.id, coachId: req.user.id, accept: !!accept, rejectionReason });
-    // (v0.11) Tell the member the outcome.
-    const who = await pool.query(
-      `SELECT cp.first_name, cp.last_name, cs.start_at
-         FROM coach_sessions cs JOIN coach_profiles cp ON cp.user_id = cs.coach_id
-        WHERE cs.id = $1`, [b.session_id]);
-    const c = who.rows[0] || {};
-    await notify({
-      userId: b.member_id,
-      type: accept ? 'booking_accepted' : 'booking_rejected',
-      titleEn: accept ? 'Booking confirmed' : 'Booking declined',
-      titleAr: accept ? 'تم تأكيد الحجز' : 'تم رفض الحجز',
-      bodyEn: accept
-        ? `${c.first_name} ${c.last_name} confirmed your session.`
-        : `${c.first_name} ${c.last_name} declined your request: ${b.rejection_reason}`,
-      bodyAr: accept
-        ? `أكد ${c.first_name} ${c.last_name} جلستك.`
-        : `رفض ${c.first_name} ${c.last_name} طلبك: ${b.rejection_reason}`,
-      relatedId: b.id,
-      email: true,
-    });
-    res.json(b);
-  } catch (err) { handle(res, err); }
-});
+// Coach accepts or rejects.
+// For ONLINE sessions, a real Zoom meeting is created before acceptance.
+// If Zoom creation fails, the booking stays pending rather than being
+// accepted with a broken/fake meeting link.
+router.post(
+  '/:id/decision',
+  authenticate,
+  requireRole('coach'),
+  async (req, res) => {
+    const { accept, rejectionReason } = req.body || {};
 
+    try {
+      if (accept) {
+        // Only prepare Zoom for a valid pending booking belonging to this coach.
+        const sessionResult = await pool.query(
+          `SELECT
+              b.id AS booking_id,
+              b.status AS booking_status,
+              cs.id AS session_id,
+              cs.delivery,
+              cs.zoom_join_url,
+              cs.start_at,
+              cs.end_at,
+              cp.first_name AS coach_first,
+              cp.last_name AS coach_last
+           FROM bookings b
+           JOIN coach_sessions cs
+             ON cs.id = b.session_id
+           JOIN coach_profiles cp
+             ON cp.user_id = cs.coach_id
+          WHERE b.id = $1
+            AND cs.coach_id = $2
+            AND b.status = 'pending'
+          LIMIT 1`,
+          [req.params.id, req.user.id]
+        );
+
+        // If no valid pending booking is found, let coachDecision()
+        // return the normal booking error below.
+        if (sessionResult.rowCount > 0) {
+          const row = sessionResult.rows[0];
+
+          if (
+            row.delivery === 'online' &&
+            !row.zoom_join_url
+          ) {
+            const durationMinutes = Math.max(
+              15,
+              Math.round(
+                (new Date(row.end_at) -
+                  new Date(row.start_at)) /
+                  60000
+              )
+            );
+
+            const link = await generateZoomLink(
+              row.session_id,
+              {
+                topic:
+                  `CoachlyJo session with ` +
+                  `${row.coach_first} ${row.coach_last}`,
+                startAt: row.start_at,
+                durationMinutes,
+              }
+            );
+
+            await pool.query(
+              `UPDATE coach_sessions
+                  SET zoom_meeting_id=$2,
+                      zoom_join_url=$3,
+                      zoom_start_url=$4
+                WHERE id=$1`,
+              [
+                row.session_id,
+                link.meetingId,
+                link.joinUrl,
+                link.startUrl,
+              ]
+            );
+          }
+        }
+      }
+
+      const b = await svc.coachDecision({
+        bookingId: req.params.id,
+        coachId: req.user.id,
+        accept: !!accept,
+        rejectionReason,
+      });
+
+      // Tell the member the outcome.
+      const who = await pool.query(
+        `SELECT
+            cp.first_name,
+            cp.last_name,
+            cs.start_at
+           FROM coach_sessions cs
+           JOIN coach_profiles cp
+             ON cp.user_id = cs.coach_id
+          WHERE cs.id = $1`,
+        [b.session_id]
+      );
+
+      const c = who.rows[0] || {};
+
+      await notify({
+        userId: b.member_id,
+        type: accept
+          ? 'booking_accepted'
+          : 'booking_rejected',
+        titleEn: accept
+          ? 'Booking confirmed'
+          : 'Booking declined',
+        titleAr: accept
+          ? 'تم تأكيد الحجز'
+          : 'تم رفض الحجز',
+        bodyEn: accept
+          ? `${c.first_name} ${c.last_name} confirmed your session.`
+          : `${c.first_name} ${c.last_name} declined your request: ${b.rejection_reason}`,
+        bodyAr: accept
+          ? `أكد ${c.first_name} ${c.last_name} جلستك.`
+          : `رفض ${c.first_name} ${c.last_name} طلبك: ${b.rejection_reason}`,
+        relatedId: b.id,
+        email: true,
+      });
+
+      res.json(b);
+    } catch (err) {
+      handle(res, err);
+    }
+  }
+);
 // Coach marks completed -> deduct a class (spec §6.6, §7.3).
 router.post('/:id/complete', authenticate, requireRole('coach'), async (req, res) => {
   try {

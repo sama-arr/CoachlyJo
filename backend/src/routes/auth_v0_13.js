@@ -1,11 +1,13 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const { pool, withTransaction } = require('../db/pool_v0_13');
 const { sign, authenticate } = require('../middleware/auth_v0_13');
 const { sendMail } = require('../services/mail.service_v0_13');
 const { notifyAdmins } = require('../services/notification.service_v0_13');
 
 const router = express.Router();
+const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
 const DEV_OTP = process.env.OTP_DEV_MODE !== 'false';
 
 function validPassword(pw) {
@@ -161,6 +163,54 @@ router.post('/verify', async (req, res) => {
   }
 });
 
+// --- Resend email verification OTP ---
+router.post('/resend-verification', async (req, res) => {
+  const { userId } = req.body || {};
+
+  if (!userId) {
+    return res.status(400).json({ error: 'userId required' });
+  }
+
+  try {
+    const u = await pool.query(
+      `SELECT id, email, email_verified
+         FROM users
+        WHERE id=$1
+          AND role IN ('member', 'coach')`,
+      [userId]
+    );
+
+    if (u.rowCount === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (u.rows[0].email_verified) {
+      return res.json({
+        message: 'Email is already verified.'
+      });
+    }
+
+    // Invalidate all previous unused verification codes.
+    await pool.query(
+      `UPDATE otp_verifications
+          SET consumed_at=now()
+        WHERE user_id=$1
+          AND consumed_at IS NULL`,
+      [userId]
+    );
+
+    // Generate and email a fresh OTP.
+    const otp = await issueOtp(userId);
+
+    res.json({
+      message: 'A new verification code has been sent to your email.',
+      devOtp: DEV_OTP ? otp : undefined,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // --- Login ---
 router.post('/login', async (req, res) => {
   const { email, password } = req.body || {};
@@ -265,39 +315,172 @@ router.post('/forgot-password', async (req, res) => {
   res.json({ message: RESET_NEUTRAL, devCode: DEV_OTP ? code : undefined });
 });
 
-router.post('/reset-password', async (req, res) => {
-  const { email, code, newPassword, confirmPassword } = req.body || {};
-  if (!email || !code || !newPassword || !confirmPassword)
-    return res.status(400).json({ error: 'email, code, newPassword, confirmPassword required' });
-  if (newPassword !== confirmPassword)
-    return res.status(400).json({ error: 'New password and confirmation do not match' });
-  if (!validPassword(newPassword))
-    return res.status(400).json({ error: 'New password must be at least 8 characters' });
-
-  const u = await pool.query(
-    `SELECT id FROM users WHERE email=$1 AND role IN ('member','coach')`, [email]);
-  // Same message for unknown email / no code / wrong code: don't leak which.
+// Step 2 of forgot-password flow:
+// verify the OTP first, then issue a short-lived reset token.
+router.post('/verify-reset-code', async (req, res) => {
+  const { email, code } = req.body || {};
   const INVALID = { error: 'Invalid or expired code' };
-  if (u.rowCount === 0) return res.status(400).json(INVALID);
 
-  const r = await pool.query(
-    `SELECT * FROM password_resets
-      WHERE user_id=$1 AND consumed_at IS NULL AND expires_at > now()
-      ORDER BY created_at DESC LIMIT 1`, [u.rows[0].id]);
-  if (r.rowCount === 0) return res.status(400).json(INVALID);
-  const reset = r.rows[0];
-  if (reset.attempts >= RESET_MAX_ATTEMPTS) return res.status(400).json(INVALID);
-
-  const ok = await bcrypt.compare(String(code).toUpperCase(), reset.code_hash);
-  if (!ok) {
-    await pool.query(`UPDATE password_resets SET attempts = attempts + 1 WHERE id=$1`, [reset.id]);
+  if (!email || !code || !validEmail(email)) {
     return res.status(400).json(INVALID);
   }
 
-  const hash = await bcrypt.hash(newPassword, 10);
-  await pool.query(`UPDATE users SET password_hash=$2, updated_at=now() WHERE id=$1`, [u.rows[0].id, hash]);
-  await pool.query(`UPDATE password_resets SET consumed_at=now() WHERE id=$1`, [reset.id]);
-  res.json({ reset: true });
+  try {
+    const u = await pool.query(
+      `SELECT id
+         FROM users
+        WHERE email=$1
+          AND role IN ('member','coach')`,
+      [email]
+    );
+
+    if (u.rowCount === 0) {
+      return res.status(400).json(INVALID);
+    }
+
+    const r = await pool.query(
+      `SELECT *
+         FROM password_resets
+        WHERE user_id=$1
+          AND consumed_at IS NULL
+          AND expires_at > now()
+        ORDER BY created_at DESC
+        LIMIT 1`,
+      [u.rows[0].id]
+    );
+
+    if (r.rowCount === 0) {
+      return res.status(400).json(INVALID);
+    }
+
+    const reset = r.rows[0];
+
+    if (reset.attempts >= RESET_MAX_ATTEMPTS) {
+      return res.status(400).json(INVALID);
+    }
+
+    const ok = await bcrypt.compare(
+      String(code).toUpperCase(),
+      reset.code_hash
+    );
+
+    if (!ok) {
+      await pool.query(
+        `UPDATE password_resets
+            SET attempts = attempts + 1
+          WHERE id=$1`,
+        [reset.id]
+      );
+
+      return res.status(400).json(INVALID);
+    }
+
+    // Code is correct. Do NOT change the password yet.
+    // Give the app a short-lived token allowing the next step.
+    const resetToken = jwt.sign(
+      {
+        purpose: 'password-reset',
+        userId: u.rows[0].id,
+        resetId: reset.id,
+      },
+      JWT_SECRET,
+      { expiresIn: '10m' }
+    );
+
+    res.json({
+      verified: true,
+      resetToken,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+// Step 3 of forgot-password flow:
+// password can only be changed after OTP verification.
+router.post('/reset-password', async (req, res) => {
+  const { resetToken, newPassword, confirmPassword } = req.body || {};
+
+  if (!resetToken || !newPassword || !confirmPassword) {
+    return res.status(400).json({
+      error: 'resetToken, newPassword and confirmPassword required'
+    });
+  }
+
+  if (newPassword !== confirmPassword) {
+    return res.status(400).json({
+      error: 'New password and confirmation do not match'
+    });
+  }
+
+  if (!validPassword(newPassword)) {
+    return res.status(400).json({
+      error: 'New password must be at least 8 characters'
+    });
+  }
+
+  let payload;
+
+  try {
+    payload = jwt.verify(resetToken, JWT_SECRET);
+  } catch (_) {
+    return res.status(400).json({
+      error: 'Reset session expired. Please request a new code.'
+    });
+  }
+
+  if (
+    payload.purpose !== 'password-reset' ||
+    !payload.userId ||
+    !payload.resetId
+  ) {
+    return res.status(400).json({
+      error: 'Invalid reset session'
+    });
+  }
+
+  try {
+    // Make sure this reset request is still valid and unused.
+    const r = await pool.query(
+      `SELECT id
+         FROM password_resets
+        WHERE id=$1
+          AND user_id=$2
+          AND consumed_at IS NULL
+          AND expires_at > now()`,
+      [payload.resetId, payload.userId]
+    );
+
+    if (r.rowCount === 0) {
+      return res.status(400).json({
+        error: 'Reset session expired. Please request a new code.'
+      });
+    }
+
+    const hash = await bcrypt.hash(newPassword, 10);
+
+    await withTransaction(async (client) => {
+      await client.query(
+        `UPDATE users
+            SET password_hash=$2,
+                updated_at=now()
+          WHERE id=$1`,
+        [payload.userId, hash]
+      );
+
+      await client.query(
+        `UPDATE password_resets
+            SET consumed_at=now()
+          WHERE id=$1`,
+        [payload.resetId]
+      );
+    });
+
+    res.json({ reset: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // (v0.10 items 1-3) Home page content: intro, how-it-works steps and the
