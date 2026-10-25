@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../core/api_v0_13.dart';
@@ -72,31 +73,83 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   Future<void> _pickDocument(String docType) async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png'],
-      withData: true,
+    final source = await showModalBottomSheet<String>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_library),
+              title: const Text('Choose from Photos'),
+              onTap: () => Navigator.pop(ctx, 'photos'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.folder),
+              title: const Text('Choose from Files'),
+              onTap: () => Navigator.pop(ctx, 'files'),
+            ),
+          ],
+        ),
+      ),
     );
-    if (result == null || result.files.isEmpty) return;
-    final f = result.files.first;
-    if (f.bytes == null) return;
-    final ext = (f.extension ?? '').toLowerCase();
-    const mimeByExt = {
-      'pdf': 'application/pdf',
-      'doc': 'application/msword',
-      'docx':
-          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'jpg': 'image/jpeg',
-      'jpeg': 'image/jpeg',
-      'png': 'image/png',
-    };
+
+    if (source == null) return;
+
+    String fileName;
+    String mimeType;
+    List<int> bytes;
+
+    if (source == 'photos') {
+      final image = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 90,
+      );
+
+      if (image == null) return;
+
+      fileName = image.name;
+      bytes = await image.readAsBytes();
+
+      final ext = image.name.split('.').last.toLowerCase();
+      mimeType = ext == 'png' ? 'image/png' : 'image/jpeg';
+    } else {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png'],
+        withData: true,
+      );
+
+      if (result == null || result.files.isEmpty) return;
+
+      final f = result.files.first;
+      if (f.bytes == null) return;
+
+      fileName = f.name;
+      bytes = f.bytes!;
+
+      final ext = (f.extension ?? '').toLowerCase();
+
+      const mimeByExt = {
+        'pdf': 'application/pdf',
+        'doc': 'application/msword',
+        'docx':
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'jpg': 'image/jpeg',
+        'jpeg': 'image/jpeg',
+        'png': 'image/png',
+      };
+
+      mimeType = mimeByExt[ext] ?? 'application/octet-stream';
+    }
+
     setState(() {
       _docs.removeWhere((d) => d['docType'] == docType);
+
       _docs.add({
         'docType': docType,
-        'fileName': f.name,
-        'mimeType': mimeByExt[ext] ?? 'application/octet-stream',
-        'dataBase64': base64Encode(f.bytes!)
+        'fileName': fileName,
+        'mimeType': mimeType,
+        'dataBase64': base64Encode(bytes),
       });
     });
   }
