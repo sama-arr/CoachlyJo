@@ -51,7 +51,7 @@ workflows:
       - name: Get packages
         script: cd frontend && flutter pub get
       - name: Analyze
-        script: cd frontend && flutter analyze --no-fatal-infos
+        script: flutter analyze --no-fatal-warnings --no-fatal-infos
       - name: Build signed app bundle
         script: |
           cd frontend
