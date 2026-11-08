@@ -41,6 +41,7 @@ workflows:
         - coachlyjo_upload
       groups:
         - coachlyjo
+        - staging
       flutter: stable
       java: 17
     scripts:
@@ -56,7 +57,7 @@ workflows:
           cd frontend
           flutter build appbundle --release \
             --build-number="$PROJECT_BUILD_NUMBER" \
-            --dart-define=API_BASE_URL="$API_BASE_URL"
+            --dart-define=API_BASE_URL=$STAGING_API_BASE_URL
     artifacts:
       - frontend/build/**/outputs/**/*.aab
       - frontend/build/**/outputs/**/mapping.txt
@@ -79,6 +80,7 @@ workflows:
         bundle_identifier: com.coachlyjo.app
       groups:
         - coachlyjo
+        - staging
       flutter: stable
       xcode: latest
       cocoapods: default
@@ -94,7 +96,7 @@ workflows:
           cd frontend
           flutter build ipa --release \
             --build-number="$PROJECT_BUILD_NUMBER" \
-            --dart-define=API_BASE_URL="$API_BASE_URL" \
+            --dart-define=API_BASE_URL=$STAGING_API_BASE_URL \
             --export-options-plist=/Users/builder/export_options.plist
     artifacts:
       - frontend/build/ios/ipa/*.ipa
