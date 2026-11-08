@@ -5,6 +5,7 @@ import '../core/theme_v0_13.dart';
 import '../core/motion_v0_13.dart';
 import '../core/i18n_v0_13.dart';
 import '../core/link_text_v0_13.dart';
+import '../core/gym_art_v0_13.dart';
 
 /// (v0.10 items 1-3) Home tab for members and coaches.
 ///
@@ -24,13 +25,9 @@ class _HomeScreenState extends State<HomeScreen> {
   Map? data;
   bool loading = true;
   String? error;
-  int _step = 0;
-  final _steps = PageController();
 
   @override
   void initState() { super.initState(); _load(); }
-  @override
-  void dispose() { _steps.dispose(); super.dispose(); }
 
   Future<void> _load() async {
     setState(() { loading = true; error = null; });
@@ -43,6 +40,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   bool get _isAr => Localizations.localeOf(context).languageCode == 'ar';
+  bool get isLight => Theme.of(context).brightness == Brightness.light;
   String _title(Map b) => _isAr && '${b['title_ar']}'.trim().isNotEmpty ? '${b['title_ar']}' : '${b['title_en']}';
   String _body(Map b) => _isAr && '${b['body_ar']}'.trim().isNotEmpty ? '${b['body_ar']}' : '${b['body_en']}';
 
@@ -133,66 +131,56 @@ class _HomeScreenState extends State<HomeScreen> {
               ]),
             ),
           ),
-          SizedBox(
-            height: 178,
-            child: PageView.builder(
-              controller: _steps,
-              onPageChanged: (i) => setState(() => _step = i),
-              itemCount: steps.length,
-              itemBuilder: (_, i) {
-                final s = steps[i] as Map;
-                return Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                  padding: const EdgeInsets.all(18),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [Brand.magenta.withValues(alpha: 0.14), Brand.surface],
-                    ),
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: Brand.magenta.withValues(alpha: 0.22)),
+          // (v0.14 item 7) Steps are stacked one under the other — testers
+          // missed the later steps when they were a sliding carousel.
+          ...steps.asMap().entries.map((e) {
+            final st = e.value as Map;
+            return FadeInUp(
+              index: 3 + e.key,
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Brand.magenta.withValues(alpha: isLight ? 0.08 : 0.14),
+                      Theme.of(context).colorScheme.surface,
+                    ],
                   ),
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Row(children: [
-                      Container(
-                        width: 30, height: 30,
-                        decoration: const BoxDecoration(gradient: Brand.gradient, shape: BoxShape.circle),
-                        alignment: Alignment.center,
-                        child: Text('${i + 1}',
-                            style: const TextStyle(fontWeight: FontWeight.w800, color: Colors.white, fontSize: 14)),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(_title(s),
-                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
-                      ),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                      color: Brand.magenta.withValues(alpha: isLight ? 0.16 : 0.22)),
+                ),
+                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Container(
+                    width: 30, height: 30,
+                    decoration: BoxDecoration(
+                        gradient: Brand.gradientFor(Theme.of(context).brightness),
+                        shape: BoxShape.circle),
+                    alignment: Alignment.center,
+                    child: Text('${e.key + 1}',
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w800, color: Colors.white, fontSize: 14)),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(_title(st),
+                          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 6),
+                      Text(_body(st),
+                          style: TextStyle(
+                              fontSize: 13,
+                              height: 1.5,
+                              color: isLight ? Brand.mutedLight : const Color(0xFFCFCFDA))),
                     ]),
-                    const SizedBox(height: 10),
-                    Expanded(
-                      child: Text(_body(s),
-                          style: const TextStyle(fontSize: 13, height: 1.5, color: Color(0xFFCFCFDA))),
-                    ),
-                  ]),
-                );
-              },
-            ),
-          ),
-          // page dots
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: List.generate(steps.length, (i) => AnimatedContainer(
-              duration: const Duration(milliseconds: 240),
-              margin: const EdgeInsets.symmetric(horizontal: 3, vertical: 8),
-              width: i == _step ? 18 : 6,
-              height: 6,
-              decoration: BoxDecoration(
-                gradient: i == _step ? Brand.gradient : null,
-                color: i == _step ? null : const Color(0xFF3A3A46),
-                borderRadius: BorderRadius.circular(3),
+                  ),
+                ]),
               ),
-            )),
-          ),
+            );
+          }),
         ],
 
         // ---- rules & regulations ----
@@ -206,7 +194,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   const GradientIconBadge(icon: Icons.gavel, size: 32),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: Text(tr(context, 'Rules & regulations'),
+                    child: Text(tr(context, 'Cancellation policy'),
                         style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
                   ),
                 ]),
@@ -224,9 +212,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Theme(
                   data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
                   child: ExpansionTile(
-                    // The first rule opens by default so the policy is visible
-                    // without a tap.
-                    initiallyExpanded: e.key == 0,
+                    // (v0.14 item 5) Collapsed by default — the home page should
+                    // not open on a wall of policy text.
+                    initiallyExpanded: false,
                     leading: const Icon(Icons.policy_outlined, size: 20),
                     title: Text(_title(r),
                         style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),

@@ -11,6 +11,8 @@ import '../core/i18n_v0_13.dart';
 import '../core/motion_v0_13.dart';
 import 'home_screen_v0_13.dart';
 import 'notifications_v0_13.dart';
+import 'complete_profile_v0_13.dart';
+import 'app_drawer_v0_13.dart';
 import '../core/link_text_v0_13.dart';
 import 'settings_screen_v0_13.dart';
 
@@ -22,60 +24,84 @@ class MemberHome extends StatefulWidget {
 
 class _MemberHomeState extends State<MemberHome> {
   int _tab = 0;
+  // (v0.14 item 2) Profile completion is mandatory; the tab stays until done.
+  bool? _profileComplete;
+
+  @override
+  void initState() { super.initState(); _checkProfile(); }
+
+  Future<void> _checkProfile() async {
+    try {
+      final st = await ApiClient.instance.get('/api/profile/status');
+      if (mounted) setState(() => _profileComplete = st['complete'] == true);
+    } catch (_) {
+      if (mounted) setState(() => _profileComplete = true);  // never lock on a network blip
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final needsProfile = _profileComplete == false;
     // (v0.10 item 1) Home is the first tab: what CoachlyJo is + the rules.
     final pages = [
       const HomeScreen(audience: 'member'),
+      if (needsProfile)
+        CompleteProfileScreen(role: 'member', onCompleted: () {
+          setState(() { _profileComplete = true; _tab = 0; });
+        }),
       const _CoachesTab(),
       const _PackagesTab(),
       const _BookingsTab()
     ];
+    final titles = [
+      tr(context, 'Home'),
+      if (needsProfile) tr(context, 'Complete profile'),
+      tr(context, 'Find a Coach'),
+      tr(context, 'Packages'),
+      tr(context, 'Bookings'),
+    ];
     return Scaffold(
       appBar: AppBar(
-        title: Text([
-          tr(context, 'Home'),
-          tr(context, 'Find a Coach'),
-          tr(context, 'Packages'),
-          tr(context, 'Bookings'),
-        ][_tab]),
-        actions: [
-          const NotificationBell(),
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.settings),
-            onSelected: (v) {
-              if (v == 'settings') {
-                Navigator.push(context,
-                    MaterialPageRoute(builder: (_) => const SettingsScreen()));
-              } else if (v == 'signout') {
-                context.read<AuthState>().logout();
-              }
-            },
-            itemBuilder: (_) => [
-              PopupMenuItem(
-                  value: 'settings', child: Text(tr(context, 'Settings'))),
-              PopupMenuItem(
-                  value: 'signout', child: Text(tr(context, 'Sign out'))),
-            ],
-          ),
-        ],
+        title: Text(titles[_tab.clamp(0, titles.length - 1)]),
+        actions: const [NotificationBell()],
       ),
+      // (v0.14 item 21) Hamburger opens a slide-out drawer.
+      drawer: const AppDrawer(role: 'member'),
       body: GlowBackground(child: pages[_tab]),
       bottomNavigationBar: NavigationBar(
-        selectedIndex: _tab,
+        selectedIndex: _tab.clamp(0, pages.length - 1),
         onDestinationSelected: (i) => setState(() => _tab = i),
+        // (v0.14 item 15) Only the selected tab shows its label, so the bar
+        // never squeezes icons and text together.
+        labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
         destinations: [
           NavigationDestination(
               icon: const Icon(Icons.home_outlined),
               selectedIcon: const Icon(Icons.home),
+              tooltip: tr(context, 'Home'),
               label: tr(context, 'Home')),
+          if (needsProfile)
+            NavigationDestination(
+                icon: Badge(
+                  backgroundColor: Theme.of(context).colorScheme.error,
+                  smallSize: 8,
+                  child: const Icon(Icons.assignment_ind_outlined),
+                ),
+                selectedIcon: const Icon(Icons.assignment_ind),
+                tooltip: tr(context, 'Complete profile'),
+                label: tr(context, 'Profile')),
           NavigationDestination(
-              icon: const Icon(Icons.search), label: tr(context, 'Coaches')),
+              icon: const Icon(Icons.search),
+              tooltip: tr(context, 'Coaches'),
+              label: tr(context, 'Coaches')),
           NavigationDestination(
               icon: const Icon(Icons.card_membership),
+              tooltip: tr(context, 'Packages'),
               label: tr(context, 'Packages')),
           NavigationDestination(
-              icon: const Icon(Icons.event), label: tr(context, 'Bookings')),
+              icon: const Icon(Icons.event),
+              tooltip: tr(context, 'Bookings'),
+              label: tr(context, 'Bookings')),
         ],
       ),
     );

@@ -49,6 +49,29 @@ function dowPlus(n) {
   return { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }[wd];
 }
 const minutesBetween = (a, b) => Math.round((new Date(b) - new Date(a)) / 60000);
+// (v0.14) The calendar stores availability against real dates.
+const datePlus = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
+
+// (v0.14 item 2) Registration is now short; the rest of the profile is
+// completed inside the app. Members must finish it before booking or buying,
+// so the suite completes it the same way the app does.
+async function completeMemberProfile(token, location = 'Abdoun') {
+  return api('POST', '/api/profile/member', {
+    dateOfBirth: '1995-04-10',
+    location,
+    assessment: { goal: 'Lose weight', level: 'beginner' },
+  }, token);
+}
+async function completeCoachProfile(token) {
+  return api('POST', '/api/profile/coach', {
+    dateOfBirth: '1990-05-01',
+    yearsExperience: 6,
+    specialties: ['Strength training', 'Weight loss'],
+    documents: [
+      { docType: 'degree_certificate', fileName: 'degree.pdf', mimeType: 'application/pdf', dataBase64: pdfB64 },
+    ],
+  }, token);
+}
 
 (async () => {
   console.log('\n=== 1. ADMIN LOGIN ===');
@@ -59,7 +82,7 @@ const minutesBetween = (a, b) => Math.round((new Date(b) - new Date(a)) / 60000)
   console.log('\n=== 2. MEMBER REGISTER + OTP + LOGIN ===');
   const mReg = await api('POST', '/api/auth/register/member', {
     email: `m${uniq}@x.com`, phone: `0790${String(uniq).slice(-6)}`, password: 'secret12',
-    firstName: 'Lina', lastName: 'A', location: 'Amman', dateOfBirth: '1995-04-10',
+    firstName: 'Lina', lastName: 'A', nationality: 'Jordanian', location: 'Amman', dateOfBirth: '1995-04-10',
     birthPlace: 'Amman', nationality: 'Jordan',
     assessment: { goal: 'Lose weight', level: 'beginner' },
   });
@@ -68,12 +91,13 @@ const minutesBetween = (a, b) => Math.round((new Date(b) - new Date(a)) / 60000)
   check('member OTP verify', mVerify.data.verified === true);
   const mLogin = await api('POST', '/api/auth/login', { email: `m${uniq}@x.com`, password: 'secret12' });
   const memberTok = mLogin.data.token;
+  check('member completes their profile', (await completeMemberProfile(memberTok, 'Amman')).status === 200);
   check('member login', !!memberTok);
 
   console.log('\n=== 3. COACHES REGISTER; A APPROVED NOW, B APPROVED LATER ===');
   const cReg = await api('POST', '/api/auth/register/coach', {
     email: `c${uniq}@x.com`, phone: `0791${String(uniq).slice(-6)}`, password: 'secret12',
-    firstName: 'Omar', lastName: 'K', dateOfBirth: '1990-05-01', nationality: 'Jordanian',
+    firstName: 'Omar', lastName: 'K', nationality: 'Jordanian', dateOfBirth: '1990-05-01', nationality: 'Jordanian',
     bio: 'Certified strength coach, 6 years.',
     documents: [
       { docType: 'degree_certificate', fileName: 'degree.pdf', mimeType: 'application/pdf', dataBase64: pdfB64 },
@@ -87,7 +111,7 @@ const minutesBetween = (a, b) => Math.round((new Date(b) - new Date(a)) / 60000)
 
   const c2Reg = await api('POST', '/api/auth/register/coach', {
     email: `c2${uniq}@x.com`, phone: `0792${String(uniq).slice(-6)}`, password: 'secret12',
-    firstName: 'Sara', lastName: 'M', dateOfBirth: '1992-02-02', nationality: 'Jordanian',
+    firstName: 'Sara', lastName: 'M', nationality: 'Jordanian', dateOfBirth: '1992-02-02', nationality: 'Jordanian',
     bio: 'Yoga & mobility.',
   });
   const coach2Id = c2Reg.data.user.id;
@@ -108,57 +132,94 @@ const minutesBetween = (a, b) => Math.round((new Date(b) - new Date(a)) / 60000)
   check('document download with ?token=', dlQuery.status === 200 && dlQuery.bytes.length > 5);
   check('document download rejects non-admin', (await apiRaw(`/api/admin/documents/${docId}/download`, memberTok, true)).status === 403);
 
-  console.log('\n=== 4. WEEKLY AVAILABILITY (v0.5 item 5) ===');
-  const dowEve = dowPlus(1);   // evening online range, "tomorrow's" weekday
-  const dowIP = dowPlus(2);    // in-person range
-  const dowTog = dowPlus(3);   // used later for the day-toggle test
-  const dowB = dowPlus(1);     // coach B
+  console.log('\n=== 4. PER-WEEK AVAILABILITY CALENDAR (v0.14 item 16) ===');
+  const dateEve = datePlus(1);   // evening online hours, tomorrow
+  const dateIP = datePlus(2);    // in-person hours
+  const dateTog = datePlus(3);   // used later for the clear/edit tests
+  const dateB = datePlus(1);     // coach B
 
-  const av0 = await api('GET', '/api/coaches/availability', null, coachTok);
-  check('availability defaults: 7 days, 50-min sessions, all disabled',
-    av0.status === 200 && av0.data.sessionMinutes === 50 && av0.data.days.length === 7 && av0.data.days.every((d) => !d.enabled),
-    JSON.stringify(av0.data).slice(0, 120));
+  const av0 = await api('GET', '/api/coaches/availability/week', null, coachTok);
+  check('week view returns 7 dated days and the 50-min default',
+    av0.status === 200 && av0.data.sessionMinutes === 50 && av0.data.days.length === 7
+    && av0.data.days.every((d) => /^\d{4}-\d{2}-\d{2}$/.test(d.date)),
+    JSON.stringify(av0.data).slice(0, 140));
+  check('week starts on a Monday', new Date(`${av0.data.weekStart}T00:00:00Z`).getUTCDay() === 1);
+  check('a fresh week has no hours set', av0.data.days.every((d) => d.blocks.length === 0));
 
-  const r1 = await api('POST', '/api/coaches/availability/ranges',
-    { dow: dowEve, startTime: '20:00', endTime: '23:00', delivery: 'online' }, coachTok);
-  check('coach A adds evening online range -> sessions generated', r1.status === 201 && r1.data.generated > 0, JSON.stringify(r1.data));
-  const rangeEveId = r1.data.range.id;
-  const r2 = await api('POST', '/api/coaches/availability/ranges',
-    { dow: dowIP, startTime: '10:00', endTime: '12:00', delivery: 'in_person' }, coachTok);
-  check('coach A adds in-person range', r2.status === 201 && r2.data.generated > 0);
-  const r3 = await api('POST', '/api/coaches/availability/ranges',
-    { dow: dowTog, startTime: '09:00', endTime: '11:00', delivery: 'online' }, coachTok);
-  check('coach A adds third range (toggle-test day)', r3.status === 201);
-  const rangeTogId = r3.data.range.id;
+  const r1 = await api('POST', '/api/coaches/availability/day',
+    { date: dateEve, startTime: '20:00', endTime: '23:00', delivery: 'online' }, coachTok);
+  check('coach A paints evening hours -> sessions generated', r1.status === 201 && r1.data.generated > 0, JSON.stringify(r1.data));
+  const blockEveId = r1.data.block.id;
+  const r2 = await api('POST', '/api/coaches/availability/day',
+    { date: dateIP, startTime: '10:00', endTime: '12:00', delivery: 'in_person' }, coachTok);
+  check('coach A adds in-person hours', r2.status === 201 && r2.data.generated > 0);
+  const r3 = await api('POST', '/api/coaches/availability/day',
+    { date: dateTog, startTime: '09:00', endTime: '11:00', delivery: 'online' }, coachTok);
+  check('coach A adds a third day of hours', r3.status === 201);
+  const blockTogId = r3.data.block.id;
 
-  const overlap = await api('POST', '/api/coaches/availability/ranges',
-    { dow: dowEve, startTime: '21:00', endTime: '22:00', delivery: 'online' }, coachTok);
-  check('overlapping range on same day rejected', overlap.status === 409, JSON.stringify(overlap.data));
-  const badTimes = await api('POST', '/api/coaches/availability/ranges',
-    { dow: dowEve, startTime: '23:00', endTime: '22:00', delivery: 'online' }, coachTok);
+  // More evening days, so the later booking/cancellation tests have enough
+  // open online slots to work with.
+  const extraEveIds = [];
+  for (const d of [4, 5, 6, 7]) {
+    const extra = await api('POST', '/api/coaches/availability/day',
+      { date: datePlus(d), startTime: '20:00', endTime: '23:00', delivery: 'online' }, coachTok);
+    if (extra.status === 201) extraEveIds.push(extra.data.block.id);
+  }
+  check('coach A has a full week of evening hours', extraEveIds.length === 4, `n=${extraEveIds.length}`);
+  const onlineBlockIds = [blockEveId, ...extraEveIds];
+
+  const overlap = await api('POST', '/api/coaches/availability/day',
+    { date: dateEve, startTime: '21:00', endTime: '22:00', delivery: 'online' }, coachTok);
+  check('overlapping hours on the same date rejected', overlap.status === 409, JSON.stringify(overlap.data));
+  const badTimes = await api('POST', '/api/coaches/availability/day',
+    { date: dateEve, startTime: '23:00', endTime: '22:00', delivery: 'online' }, coachTok);
   check('end-before-start rejected', badTimes.status === 400);
+  const pastDay = await api('POST', '/api/coaches/availability/day',
+    { date: datePlus(-3), startTime: '09:00', endTime: '10:00', delivery: 'online' }, coachTok);
+  check('hours cannot be set on a past date', pastDay.status === 400);
 
-  const av1 = await api('GET', '/api/coaches/availability', null, coachTok);
-  const eveDay = av1.data.days.find((d) => d.dow === dowEve);
-  check('availability shows day auto-enabled with its range', eveDay.enabled === true && eveDay.ranges.length === 1);
+  const av1 = await api('GET', `/api/coaches/availability/week?start=${dateEve}`, null, coachTok);
+  const eveDay = av1.data.days.find((d) => d.date === dateEve);
+  check('week view shows the painted hours on the right date', !!eveDay && eveDay.blocks.length === 1);
 
   let mySessions = (await api('GET', '/api/coaches/my-sessions', null, coachTok)).data;
-  const eveSessions = mySessions.filter((s) => s.generated_from_range === rangeEveId)
+  const eveSessions = mySessions.filter((s) => s.generated_from_day === blockEveId)
     .sort((a, b) => new Date(a.start_at) - new Date(b.start_at));
-  // 20:00-23:00 @ 50 min => 20:00, 20:50, 21:40 => 3 per occurrence, 4-week horizon
-  check('evening range generated >= 9 future sessions (3/occurrence)', eveSessions.length >= 9, `n=${eveSessions.length}`);
+  // 20:00-23:00 @ 50 min => 20:00, 20:50, 21:40 on that one date
+  check('evening hours generated 3 sessions', eveSessions.length === 3, `n=${eveSessions.length}`);
   check('sessions spaced 50 minutes (default duration)', minutesBetween(eveSessions[0].start_at, eveSessions[1].start_at) === 50,
     `${eveSessions[0].start_at} -> ${eveSessions[1].start_at}`);
   check('generated sessions are 1-on-1 online', eveSessions[0].capacity === 1 && eveSessions[0].delivery === 'online');
 
-  console.log('\n=== 4b. PRE-APPROVAL AVAILABILITY MATERIALIZES ON APPROVAL ===');
-  const rB = await api('POST', '/api/coaches/availability/ranges',
-    { dow: dowB, startTime: '18:00', endTime: '20:00', delivery: 'online' }, coach2Tok);
-  check('unapproved coach B can save availability (no sessions yet)', rB.status === 201 && rB.data.generated === 0, JSON.stringify(rB.data));
-  check('coach B has no sessions before approval', (await api('GET', '/api/coaches/my-sessions', null, coach2Tok)).data.length === 0);
+  console.log('\n=== 4a. COPY LAST WEEK (v0.14 item 16) ===');
+  const nextWeekTarget = datePlus(8);
+  const copied = await api('POST', '/api/coaches/availability/copy-week', { targetWeek: nextWeekTarget }, coachTok);
+  check('copy-week duplicates the previous week\'s hours', copied.status === 200 && copied.data.copied >= 1, JSON.stringify(copied.data));
+  const copiedWeek = await api('GET', `/api/coaches/availability/week?start=${nextWeekTarget}`, null, coachTok);
+  check('copied hours appear in the target week',
+    copiedWeek.data.days.some((d) => d.blocks.length > 0));
+  const copyAgain = await api('POST', '/api/coaches/availability/copy-week', { targetWeek: nextWeekTarget }, coachTok);
+  check('copying twice does not duplicate hours', copyAgain.status === 200 && copyAgain.data.copied === 0, JSON.stringify(copyAgain.data));
+
+  console.log('\n=== 4b. COACH LOCKED UNTIL APPROVED (v0.14 item 3) ===');
+  const rB = await api('POST', '/api/coaches/availability/day',
+    { date: dateB, startTime: '18:00', endTime: '20:00', delivery: 'online' }, coach2Tok);
+  check('unapproved coach cannot set availability', rB.status === 403 && /approval/i.test(rB.data.error || ''), JSON.stringify(rB.data));
+  check('unapproved coach cannot see their sessions',
+    (await api('GET', '/api/coaches/my-sessions', null, coach2Tok)).status === 403);
+  check('unapproved coach cannot open their dashboard',
+    (await api('GET', '/api/coaches/dashboard', null, coach2Tok)).status === 403);
   check('admin approves coach B', (await api('POST', `/api/admin/coaches/${coach2Id}/approve`, {}, adminTok)).data.status === 'approved');
+  const rB2 = await api('POST', '/api/coaches/availability/day',
+    { date: dateB, startTime: '18:00', endTime: '20:00', delivery: 'online' }, coach2Tok);
+  check('approved coach can now set availability', rB2.status === 201 && rB2.data.generated > 0, JSON.stringify(rB2.data));
+  // Hours beyond the 2-week single-package validity, for the expiry test later.
+  const rB3 = await api('POST', '/api/coaches/availability/day',
+    { date: datePlus(20), startTime: '18:00', endTime: '20:00', delivery: 'online' }, coach2Tok);
+  check('coach B also sets hours three weeks out', rB3.status === 201 && rB3.data.generated > 0);
   let bSessions = (await api('GET', '/api/coaches/my-sessions', null, coach2Tok)).data;
-  check('approval generated coach B sessions', bSessions.length > 0, `n=${bSessions.length}`);
+  check('approval unlocks session generation', bSessions.length > 0, `n=${bSessions.length}`);
 
   console.log('\n=== 4c. DURATION CHANGE REBUILDS THE GRID ===');
   const durBad = await api('PUT', '/api/coaches/availability/settings', { sessionMinutes: 40 }, coach2Tok);
@@ -172,7 +233,7 @@ const minutesBetween = (a, b) => Math.round((new Date(b) - new Date(a)) / 60000)
 
   // Pick concrete sessions for the booking tests.
   mySessions = (await api('GET', '/api/coaches/my-sessions', null, coachTok)).data;
-  const aOnline = mySessions.filter((s) => s.generated_from_range === rangeEveId)
+  const aOnline = mySessions.filter((s) => onlineBlockIds.includes(s.generated_from_day))
     .sort((a, b) => new Date(a.start_at) - new Date(b.start_at));
   const aInPerson = mySessions.filter((s) => s.delivery === 'in_person')
     .sort((a, b) => new Date(a.start_at) - new Date(b.start_at));
@@ -278,10 +339,11 @@ const minutesBetween = (a, b) => Math.round((new Date(b) - new Date(a)) / 60000)
   console.log('\n=== 12. REASSIGN + CANCELLED SINGLE ALLOWANCE ===');
   const m2Reg = await api('POST', '/api/auth/register/member', {
     email: `m2${uniq}@x.com`, phone: `0793${String(uniq).slice(-6)}`, password: 'secret12',
-    firstName: 'Rana', lastName: 'B', location: 'Irbid',
+    firstName: 'Rana', lastName: 'B', nationality: 'Jordanian', location: 'Irbid',
   });
   const m2Login = await api('POST', '/api/auth/login', { email: `m2${uniq}@x.com`, password: 'secret12' });
   const member2Tok = m2Login.data.token;
+  await completeMemberProfile(member2Tok, 'Irbid');
   const m2Single = await api('POST', '/api/members/packages/request', { packageDefId: singleOnline.id, coachId, proof }, member2Tok);
   check('member2 requests single with coach A', m2Single.status === 201);
   await api('POST', `/api/admin/packages/${m2Single.data.package.id}/reject`, {}, adminTok);
@@ -342,31 +404,26 @@ const minutesBetween = (a, b) => Math.round((new Date(b) - new Date(a)) / 60000)
   check('after early cancel remaining unchanged', Number(mine.remaining) === 5);
 
   console.log('\n=== 19. AVAILABILITY CLEANUP RULES (v0.5 item 5) ===');
-  // Book one session on the toggle-test day, then turn the day off:
-  // that booked session must be KEPT, unbooked siblings removed.
+  // Book one session on that day, then edit/delete those hours: the booked
+  // session must be KEPT, its unbooked siblings removed.
   mySessions = (await api('GET', '/api/coaches/my-sessions', null, coachTok)).data;
-  const togSessions = mySessions.filter((s) => s.generated_from_range === rangeTogId);
-  check('toggle-day range generated sessions', togSessions.length >= 4, `n=${togSessions.length}`);
+  const togSessions = mySessions.filter((s) => s.generated_from_day === blockTogId);
+  check('that day generated sessions', togSessions.length >= 2, `n=${togSessions.length}`);
   const togBook = await api('POST', '/api/bookings', { sessionId: togSessions[0].id }, memberTok);
-  check('member books a session on the toggle day', togBook.status === 201, JSON.stringify(togBook.data));
-  const togOff = await api('PUT', `/api/coaches/availability/days/${dowTog}`, { enabled: false }, coachTok);
-  check('day toggled off: unbooked removed, booked kept',
-    togOff.status === 200 && togOff.data.removed >= 3 && togOff.data.keptBooked === 1, JSON.stringify(togOff.data));
-  mySessions = (await api('GET', '/api/coaches/my-sessions', null, coachTok)).data;
-  const togAfter = mySessions.filter((s) => s.generated_from_range === rangeTogId);
-  check('only the booked session remains on that day', togAfter.length === 1 && togAfter[0].id === togSessions[0].id);
-  const togOn = await api('PUT', `/api/coaches/availability/days/${dowTog}`, { enabled: true }, coachTok);
-  check('toggling back on regenerates', togOn.status === 200 && togOn.data.generated >= 3, JSON.stringify(togOn.data));
+  check('member books one of those sessions', togBook.status === 201, JSON.stringify(togBook.data));
+  // Editing the hours rebuilds unbooked sessions and keeps booked ones.
+  const rEdit = await api('PUT', `/api/coaches/availability/day/${blockTogId}`,
+    { startTime: '08:00', endTime: '11:00' }, coachTok);
+  check('editing hours: regenerates, keeps the booked session',
+    rEdit.status === 200 && rEdit.data.generated > 0 && rEdit.data.keptBooked === 1, JSON.stringify(rEdit.data));
 
-  // Range edit rebuilds unbooked sessions on the new times.
-  const rEdit = await api('PUT', `/api/coaches/availability/ranges/${rangeTogId}`, { startTime: '08:00', endTime: '10:00' }, coachTok);
-  check('range edit responds with cleanup + regeneration', rEdit.status === 200 && rEdit.data.generated > 0 && rEdit.data.keptBooked === 1, JSON.stringify(rEdit.data));
-
-  // Range delete removes its future unbooked sessions; ranges list shrinks.
-  const delRange = await api('DELETE', `/api/coaches/availability/ranges/${rangeTogId}`, null, coachTok);
-  check('range delete: unbooked removed, booked kept', delRange.status === 200 && delRange.data.keptBooked === 1, JSON.stringify(delRange.data));
-  const avAfter = await api('GET', '/api/coaches/availability', null, coachTok);
-  check('deleted range gone from availability', avAfter.data.days.find((d) => d.dow === dowTog).ranges.length === 0);
+  // Deleting the block removes its future unbooked sessions; booked stays.
+  const delDay = await api('DELETE', `/api/coaches/availability/day/${blockTogId}`, null, coachTok);
+  check('deleting hours: unbooked removed, booked kept',
+    delDay.status === 200 && delDay.data.keptBooked === 1, JSON.stringify(delDay.data));
+  const avAfter = await api('GET', `/api/coaches/availability/week?start=${dateTog}`, null, coachTok);
+  check('deleted hours gone from the week view',
+    avAfter.data.days.find((d) => d.date === dateTog).blocks.length === 0);
   // The kept booked session survives the range deletion (provenance nulled).
   mySessions = (await api('GET', '/api/coaches/my-sessions', null, coachTok)).data;
   check('booked session survives range deletion', mySessions.some((s) => s.id === togSessions[0].id));
@@ -378,7 +435,7 @@ const minutesBetween = (a, b) => Math.round((new Date(b) - new Date(a)) / 60000)
   // Pick a slot with no booking HISTORY at all (a rejected booking leaves
   // booked=0 but deleting the session would cascade the booking row away).
   const touched = new Set([sessionA1, sessionA2, sessionA3, ...capPool]);
-  const unbooked = mySessions.find((s) => s.generated_from_range === rangeEveId && Number(s.booked) === 0 && !touched.has(s.id));
+  const unbooked = mySessions.find((s) => onlineBlockIds.includes(s.generated_from_day) && Number(s.booked) === 0 && !touched.has(s.id));
   const removeOne = await api('DELETE', `/api/coaches/availability/${unbooked.id}`, null, coachTok);
   check('coach removes a single unbooked generated session', removeOne.status === 200 && removeOne.data.removed);
   const removeBooked = await api('DELETE', `/api/coaches/availability/${sessionA2}`, null, coachTok);
@@ -403,25 +460,38 @@ const minutesBetween = (a, b) => Math.round((new Date(b) - new Date(a)) / 60000)
   const code1 = fp1.data.devCode;
   const fp2 = await api('POST', '/api/auth/forgot-password', { email: `m${uniq}@x.com` });
   const code2 = fp2.data.devCode;
-  const oldCode = await api('POST', '/api/auth/reset-password', { email: `m${uniq}@x.com`, code: code1, newPassword: 'resetpw123', confirmPassword: 'resetpw123' });
+  const oldCode = await api('POST', '/api/auth/verify-reset-code', { email: `m${uniq}@x.com`, code: code1 });
   check('requesting a new code invalidates the old one', oldCode.status === 400, JSON.stringify(oldCode.data));
 
   for (let i = 0; i < 5; i++) {
-    await api('POST', '/api/auth/reset-password', { email: `m${uniq}@x.com`, code: 'WRONG0', newPassword: 'resetpw123', confirmPassword: 'resetpw123' });
+    await api('POST', '/api/auth/verify-reset-code', { email: `m${uniq}@x.com`, code: 'WRONG0' });
   }
-  const afterAttempts = await api('POST', '/api/auth/reset-password', { email: `m${uniq}@x.com`, code: code2, newPassword: 'resetpw123', confirmPassword: 'resetpw123' });
+  const afterAttempts = await api('POST', '/api/auth/verify-reset-code', { email: `m${uniq}@x.com`, code: code2 });
   check('correct code blocked after 5 wrong attempts', afterAttempts.status === 400);
 
   const fp3 = await api('POST', '/api/auth/forgot-password', { email: `m${uniq}@x.com` });
-  const mismatch = await api('POST', '/api/auth/reset-password', { email: `m${uniq}@x.com`, code: fp3.data.devCode, newPassword: 'resetpw123', confirmPassword: 'other12345' });
+  const verified = await api('POST', '/api/auth/verify-reset-code', { email: `m${uniq}@x.com`, code: fp3.data.devCode });
+  check('valid code exchanges for a reset token', verified.status === 200 && !!verified.data.resetToken, JSON.stringify(verified.data));
+  const resetToken = verified.data.resetToken;
+
+  const mismatch = await api('POST', '/api/auth/reset-password',
+    { resetToken, newPassword: 'resetpw123', confirmPassword: 'other12345' });
   check('confirmation mismatch rejected', mismatch.status === 400);
-  const short = await api('POST', '/api/auth/reset-password', { email: `m${uniq}@x.com`, code: fp3.data.devCode, newPassword: 'short', confirmPassword: 'short' });
+  const short = await api('POST', '/api/auth/reset-password',
+    { resetToken, newPassword: 'short', confirmPassword: 'short' });
   check('short password rejected', short.status === 400);
-  const good = await api('POST', '/api/auth/reset-password', { email: `m${uniq}@x.com`, code: fp3.data.devCode, newPassword: 'resetpw123', confirmPassword: 'resetpw123' });
-  check('reset with valid code succeeds', good.status === 200 && good.data.reset === true, JSON.stringify(good.data));
-  check('login with reset password works', (await api('POST', '/api/auth/login', { email: `m${uniq}@x.com`, password: 'resetpw123' })).status === 200);
-  const reuse = await api('POST', '/api/auth/reset-password', { email: `m${uniq}@x.com`, code: fp3.data.devCode, newPassword: 'again12345', confirmPassword: 'again12345' });
-  check('code is single-use', reuse.status === 400);
+  const good = await api('POST', '/api/auth/reset-password',
+    { resetToken, newPassword: 'resetpw123', confirmPassword: 'resetpw123' });
+  check('reset with a valid token succeeds', good.status === 200, JSON.stringify(good.data));
+  check('login with reset password works',
+    (await api('POST', '/api/auth/login', { email: `m${uniq}@x.com`, password: 'resetpw123' })).status === 200);
+  const reuse = await api('POST', '/api/auth/reset-password',
+    { resetToken, newPassword: 'again12345', confirmPassword: 'again12345' });
+  check('reset token is single-use', reuse.status === 400);
+  const noToken = await api('POST', '/api/auth/reset-password',
+    { newPassword: 'again12345', confirmPassword: 'again12345' });
+  check('reset without a token rejected', noToken.status === 400);
+
   const coachFp = await api('POST', '/api/auth/forgot-password', { email: `c${uniq}@x.com` });
   check('coach can also request a reset code', coachFp.status === 200 && /^[A-Z0-9]{6}$/.test(coachFp.data.devCode || ''));
 
@@ -551,7 +621,7 @@ const minutesBetween = (a, b) => Math.round((new Date(b) - new Date(a)) / 60000)
   // Privacy gate: coach B has no relationship with member2 (that package was moved away).
   const m3Reg = await api('POST', '/api/auth/register/member', {
     email: `m3${uniq}@x.com`, phone: `0794${String(uniq).slice(-6)}`, password: 'secret12',
-    firstName: 'Noor', lastName: 'S', location: 'Abdoun',
+    firstName: 'Noor', lastName: 'S', nationality: 'Jordanian', location: 'Abdoun',
   });
   const strangerDetail = await api('GET', `/api/coaches/members/${m3Reg.data.user.id}`, null, coachTok);
   check('coach blocked from a member who is not their client', strangerDetail.status === 403, JSON.stringify(strangerDetail.data));
@@ -621,6 +691,7 @@ const minutesBetween = (a, b) => Math.round((new Date(b) - new Date(a)) / 60000)
   // which the one-usable-package-per-coach rule would (correctly) block.
   const m3Login = await api('POST', '/api/auth/login', { email: `m3${uniq}@x.com`, password: 'secret12' });
   const member3Tok = m3Login.data.token;
+  await completeMemberProfile(member3Tok, 'Khalda');
   const movePkgReq = await api('POST', '/api/members/packages/request',
     { packageDefId: pkg6.id, coachId, proof }, member3Tok);
   check('member3 buys a package with coach A (for the move test)', movePkgReq.status === 201, JSON.stringify(movePkgReq.data));
@@ -687,9 +758,10 @@ const minutesBetween = (a, b) => Math.round((new Date(b) - new Date(a)) / 60000)
   // Fresh member + package so the cancellation counters start clean.
   const m4 = await api('POST', '/api/auth/register/member', {
     email: `m4${uniq}@x.com`, phone: `0795${String(uniq).slice(-6)}`, password: 'secret12',
-    firstName: 'Dana', lastName: 'K', location: 'Sweifieh',
+    firstName: 'Dana', lastName: 'K', nationality: 'Jordanian', location: 'Sweifieh',
   });
   const m4Tok = (await api('POST', '/api/auth/login', { email: `m4${uniq}@x.com`, password: 'secret12' })).data.token;
+  await completeMemberProfile(m4Tok, 'Sweifieh');
   const m4Pkg = await api('POST', '/api/members/packages/request', { packageDefId: pkg6.id, coachId, proof }, m4Tok);
   await api('POST', `/api/admin/packages/${m4Pkg.data.package.id}/activate`, {}, adminTok);
   const m4PkgId = m4Pkg.data.package.id;
@@ -987,12 +1059,13 @@ const minutesBetween = (a, b) => Math.round((new Date(b) - new Date(a)) / 60000)
   const delEmail = `del${uniq}@x.com`;
   const delReg = await api('POST', '/api/auth/register/member', {
     email: delEmail, phone: `0796${String(uniq).slice(-6)}`, password: 'secret12',
-    firstName: 'Tariq', lastName: 'Z', location: 'Khalda',
+    firstName: 'Tariq', lastName: 'Z', nationality: 'Jordanian', location: 'Khalda',
     assessment: { goal: 'Build muscle', level: 'intermediate' },
   });
   check('registered a member for the deletion test', delReg.status === 201);
   const delId = delReg.data.user.id;
   const delTok = (await api('POST', '/api/auth/login', { email: delEmail, password: 'secret12' })).data.token;
+  await completeMemberProfile(delTok, 'Khalda');
   const delPkg = await api('POST', '/api/members/packages/request', { packageDefId: pkg6.id, coachId, proof }, delTok);
   await api('POST', `/api/admin/packages/${delPkg.data.package.id}/activate`, {}, adminTok);
   const delOpen = (await api('GET', '/api/coaches/my-sessions?scope=open', null, coachTok)).data
@@ -1052,7 +1125,7 @@ const minutesBetween = (a, b) => Math.round((new Date(b) - new Date(a)) / 60000)
   const sup = `sup${uniq}@x.com`;
   const supReg = await api('POST', '/api/auth/register/member', {
     email: sup, phone: `0797${String(uniq).slice(-6)}`, password: 'secret12',
-    firstName: 'Huda', lastName: 'M', location: 'Abdoun',
+    firstName: 'Huda', lastName: 'M', nationality: 'Jordanian', location: 'Abdoun',
   });
   const adminDel = await api('DELETE', `/api/admin/users/${supReg.data.user.id}`, { reason: 'Support request' }, adminTok);
   check('admin can delete a user on request', adminDel.status === 200 && adminDel.data.deleted === true);
@@ -1061,9 +1134,148 @@ const minutesBetween = (a, b) => Math.round((new Date(b) - new Date(a)) / 60000)
   const audit = await pool.query(`SELECT requested_by FROM account_deletions WHERE user_id=$1`, [supReg.data.user.id]);
   check('deletion is written to the audit trail', audit.rows[0]?.requested_by === 'admin');
 
+  console.log('\n=== 25r. SHORT REGISTRATION + COMPLETE PROFILE (v0.14 items 1, 2, 4, 11) ===');
+  const shortEmail = `short${uniq}@x.com`;
+  const noNat = await api('POST', '/api/auth/register/member', {
+    email: shortEmail, phone: `0798${String(uniq).slice(-6)}`, password: 'secret12',
+    firstName: 'Omar', lastName: 'Q',
+  });
+  check('registration requires nationality', noNat.status === 400, JSON.stringify(noNat.data));
+  const shortReg = await api('POST', '/api/auth/register/member', {
+    email: shortEmail, phone: `0798${String(uniq).slice(-6)}`, password: 'secret12',
+    firstName: 'Omar', lastName: 'Q', nationality: 'Jordanian',
+  });
+  check('member registers with only the five short fields', shortReg.status === 201, JSON.stringify(shortReg.data));
+  const shortTok = (await api('POST', '/api/auth/login', { email: shortEmail, password: 'secret12' })).data.token;
+
+  const st0 = await api('GET', '/api/profile/status', null, shortTok);
+  check('profile status reports exactly what is missing',
+    st0.status === 200 && st0.data.complete === false
+    && st0.data.missing.includes('dateOfBirth') && st0.data.missing.includes('location')
+    && st0.data.missing.includes('questionnaire'), JSON.stringify(st0.data));
+
+  // (item 2) The app blocks these until the profile is done — so does the API.
+  const earlyBuy = await api('POST', '/api/members/packages/request',
+    { packageDefId: pkg6.id, coachId, proof }, shortTok);
+  check('cannot buy a package before completing the profile',
+    earlyBuy.status === 403 && earlyBuy.data.profileIncomplete === true, JSON.stringify(earlyBuy.data));
+  const openForEarly = (await api('GET', '/api/coaches/my-sessions?scope=open', null, coachTok)).data;
+  const earlyBook = await api('POST', '/api/bookings', { sessionId: openForEarly[0].id }, shortTok);
+  check('cannot book before completing the profile', earlyBook.status === 403 && earlyBook.data.profileIncomplete === true);
+
+  const halfDone = await api('POST', '/api/profile/member', { dateOfBirth: '1996-02-02' }, shortTok);
+  check('profile completion rejects a half-filled form', halfDone.status === 400);
+  const done = await api('POST', '/api/profile/member',
+    { dateOfBirth: '1996-02-02', location: 'Abdoun', assessment: { goal: 'Build muscle', level: 'beginner' } }, shortTok);
+  check('member completes their profile', done.status === 200 && done.data.complete === true, JSON.stringify(done.data));
+  check('buying works once the profile is complete',
+    (await api('POST', '/api/members/packages/request', { packageDefId: pkg6.id, coachId, proof }, shortTok)).status === 201);
+  check('birth place is gone from the API',
+    !JSON.stringify(await api('GET', '/api/members/profile', null, shortTok)).includes('birth_place'));
+
+  console.log('\n=== 25s. COACH PROFILE COMPLETION (v0.14 items 4, 11) ===');
+  const cEmail = `c3${uniq}@x.com`;
+  const cReg3 = await api('POST', '/api/auth/register/coach', {
+    email: cEmail, phone: `0799${String(uniq).slice(-6)}`, password: 'secret12',
+    firstName: 'Yazan', lastName: 'H', nationality: 'Jordanian',
+  });
+  check('coach registers without documents', cReg3.status === 201, JSON.stringify(cReg3.data));
+  const c3Tok = (await api('POST', '/api/auth/login', { email: cEmail, password: 'secret12' })).data.token;
+  const cSt = await api('GET', '/api/profile/status', null, c3Tok);
+  check('coach profile status lists documents as missing',
+    cSt.data.missing.includes('documents') && cSt.data.missing.includes('yearsExperience')
+    && cSt.data.missing.includes('specialties'), JSON.stringify(cSt.data));
+  check('coach status reports pending approval', cSt.data.approvalStatus === 'pending');
+
+  const noDocs = await api('POST', '/api/profile/coach',
+    { dateOfBirth: '1992-03-03', yearsExperience: 4, specialties: ['Boxing'] }, c3Tok);
+  check('coach profile requires documents (item 4)', noDocs.status === 400 && /certificate|experience/i.test(noDocs.data.error || ''),
+    JSON.stringify(noDocs.data));
+  const cDone = await api('POST', '/api/profile/coach', {
+    dateOfBirth: '1992-03-03', yearsExperience: 4, specialties: ['Boxing', 'Conditioning'],
+    documents: [{ docType: 'degree_certificate', fileName: 'cert.pdf', mimeType: 'application/pdf', dataBase64: pdfB64 }],
+  }, c3Tok);
+  check('coach completes their profile', cDone.status === 200 && cDone.data.complete === true, JSON.stringify(cDone.data));
+
+  // (item 11) The bio is composed from experience + specialties.
+  const c3Profile = await api('GET', '/api/coaches/profile', null, c3Tok);
+  check('bio is generated from experience and specialties',
+    /4 years of experience/.test(c3Profile.data.bio_en || '') && /Boxing/.test(c3Profile.data.bio_en || ''),
+    JSON.stringify(c3Profile.data.bio_en));
+  check('Arabic bio is generated too', /سنوات/.test(c3Profile.data.bio_ar || ''), JSON.stringify(c3Profile.data.bio_ar));
+
+  // (item 11) Optional profile photo.
+  const photo = await api('POST', '/api/profile/coach/photo', { mimeType: 'image/png', dataBase64: pngB64 }, c3Tok);
+  check('coach uploads a profile photo', photo.status === 200);
+  const photoBytes = await apiRaw(`/api/profile/coach/${cReg3.data.user.id}/photo`, memberTok);
+  check('members can fetch the coach photo', photoBytes.status === 200 && photoBytes.bytes.length > 0);
+  check('coach can remove the photo', (await api('DELETE', '/api/profile/coach/photo', null, c3Tok)).status === 200);
+  check('removed photo 404s', (await apiRaw(`/api/profile/coach/${cReg3.data.user.id}/photo`, memberTok)).status === 404);
+  check('a bad photo type is rejected',
+    (await api('POST', '/api/profile/coach/photo', { mimeType: 'application/pdf', dataBase64: pdfB64 }, c3Tok)).status === 400);
+
+  console.log('\n=== 25t. CONTACT DETAILS + THEME (v0.14 items 6, 12) ===');
+  const contact = await api('GET', '/api/auth/contact', null, null);
+  check('contact details are public', contact.status === 200 && contact.data.email === 'coachlyapp@hotmail.com', JSON.stringify(contact.data));
+  const setContact = await api('PUT', '/api/admin/contact',
+    { phone: '+962790000000', instagram: 'coachlyjo' }, adminTok);
+  check('admin configures contact details', setContact.status === 200);
+  const contact2 = await api('GET', '/api/auth/contact', null, null);
+  check('updated details are served to the app',
+    contact2.data.phone === '+962790000000' && contact2.data.instagram === 'coachlyjo');
+  check('an invalid contact email is rejected',
+    (await api('PUT', '/api/admin/contact', { email: 'not-an-email' }, adminTok)).status === 400);
+
+  check('theme preference saves', (await api('PUT', '/api/profile/theme', { theme: 'light' }, memberTok)).status === 200);
+  check('an unknown theme is rejected', (await api('PUT', '/api/profile/theme', { theme: 'neon' }, memberTok)).status === 400);
+
+  console.log('\n=== 25u. PUSH TOKENS (v0.14 item 13) ===');
+  const devTok = `fcm-test-token-${uniq}-abcdefghijklmnop`;
+  check('device registers for push',
+    (await api('POST', '/api/push/register', { token: devTok, platform: 'android' }, memberTok)).status === 200);
+  check('re-registering the same token is fine',
+    (await api('POST', '/api/push/register', { token: devTok, platform: 'android' }, memberTok)).status === 200);
+  const tokRow = await pool.query(`SELECT user_id FROM device_tokens WHERE token=$1`, [devTok]);
+  check('token is stored once against the member', tokRow.rowCount === 1);
+  check('a short token is rejected',
+    (await api('POST', '/api/push/register', { token: 'abc', platform: 'android' }, memberTok)).status === 400);
+  check('an unknown platform is rejected',
+    (await api('POST', '/api/push/register', { token: devTok, platform: 'windows' }, memberTok)).status === 400);
+  check('sign-out removes the device token',
+    (await api('DELETE', '/api/push/register', { token: devTok }, memberTok)).status === 200);
+
+  console.log('\n=== 25v. ZOOM FAILURE NO LONGER BLOCKS ACCEPTANCE (v0.14) ===');
+  // The suite runs with placeholder links enabled; the contract we check here
+  // is that the response carries the zoomPending flag the app reads.
+  const zOpen = (await api('GET', '/api/coaches/my-sessions?scope=open', null, coachTok)).data
+    .filter((x) => x.delivery === 'online');
+  // `shortTok` bought a package with coach A a few checks ago and has classes left.
+  const zPkg = (await api('GET', '/api/members/packages/mine', null, shortTok)).data
+    .find((p) => p.status === 'pending_payment' || p.status === 'active');
+  if (zPkg && zPkg.status === 'pending_payment') {
+    await api('POST', `/api/admin/packages/${zPkg.id}/activate`, {}, adminTok);
+  }
+  const zBooking = await api('POST', '/api/bookings', { sessionId: zOpen[0].id }, shortTok);
+  if (zBooking.status === 201) {
+    const zDecision = await api('POST', `/api/bookings/${zBooking.data.id}/decision`, { accept: true }, coachTok);
+    check('acceptance succeeds and reports Zoom state',
+      zDecision.status === 200 && zDecision.data.status === 'accepted' && 'zoomPending' in zDecision.data,
+      JSON.stringify(zDecision.data).slice(0, 120));
+    const manual = await api('PUT', `/api/bookings/${zBooking.data.id}/meeting-link`,
+      { joinUrl: 'https://meet.google.com/abc-defg-hij' }, coachTok);
+    check('coach can supply their own meeting link', manual.status === 200, JSON.stringify(manual.data));
+    const memberSees = (await api('GET', '/api/members/bookings?scope=upcoming', null, shortTok))
+      .data.find((b) => b.id === zBooking.data.id);
+    check('member sees the coach-supplied link', memberSees && /meet\.google\.com/.test(memberSees.zoom_join_url || ''));
+    check('an invalid meeting link is rejected',
+      (await api('PUT', `/api/bookings/${zBooking.data.id}/meeting-link`, { joinUrl: 'not a url' }, coachTok)).status === 400);
+  } else {
+    check('zoom acceptance scenario set up', false, JSON.stringify(zBooking.data));
+  }
+
   console.log('\n=== 26. SCHEMA VERSION HEALTH ===');
   const sv = await api('GET', '/health/schema', null, null);
-  check('schema reports up to date (v13)', sv.status === 200 && sv.data.upToDate === true && sv.data.current === 13, JSON.stringify(sv.data));
+  check('schema reports up to date (v14)', sv.status === 200 && sv.data.upToDate === true && sv.data.current === 14, JSON.stringify(sv.data));
 
   console.log(`\n=== RESULT: ${pass} passed, ${fail} failed ===`);
   await pool.end().catch(() => {});

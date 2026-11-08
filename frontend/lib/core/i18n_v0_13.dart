@@ -141,12 +141,14 @@ const Map<String, String> _ar = {
   'Book a session': 'حجز جلسة',
   'Trial': 'جلسة تجريبية',
   'No approved coaches available yet.': 'لا يوجد مدربون معتمدون حالياً.',
-  'No sessions available for this coach yet.': 'لا توجد جلسات متاحة لهذا المدرب حالياً.',
+  'No sessions available for this coach yet.':
+      'لا توجد جلسات متاحة لهذا المدرب حالياً.',
   'Rating': 'التقييم',
   'About': 'نبذة',
   'Upcoming': 'القادمة',
   'History': 'السجل',
-  'Completed, cancelled and rejected sessions': 'الجلسات المكتملة والملغاة والمرفوضة',
+  'Completed, cancelled and rejected sessions':
+      'الجلسات المكتملة والملغاة والمرفوضة',
   'No upcoming sessions. Find a coach and book your next session!':
       'لا توجد جلسات قادمة. ابحث عن مدرب واحجز جلستك التالية!',
   'No past sessions yet.': 'لا توجد جلسات سابقة بعد.',
@@ -184,7 +186,8 @@ const Map<String, String> _ar = {
       'اختر أونلاين أو حضوري لعرض خيارات الحصص.',
   'Valid': 'صالحة لمدة',
   'weeks': 'أسابيع',
-  'Please pay to the following bank details:': 'يرجى الدفع إلى الحساب البنكي التالي:',
+  'Please pay to the following bank details:':
+      'يرجى الدفع إلى الحساب البنكي التالي:',
   'Contact admin for payment details.': 'تواصل مع الإدارة لتفاصيل الدفع.',
   'Then upload your proof of payment (required)': 'ثم ارفع إثبات الدفع (مطلوب)',
   'No image selected': 'لم يتم اختيار صورة',
@@ -192,10 +195,12 @@ const Map<String, String> _ar = {
   'Request submitted': 'تم إرسال الطلب',
   'Your proof of payment was submitted. The package activates once the admin confirms the payment.':
       'تم إرسال إثبات الدفع. سيتم تفعيل الباقة بعد تأكيد الإدارة للدفع.',
-  'Proof submitted — awaiting admin confirmation.': 'تم إرسال الإثبات — بانتظار تأكيد الإدارة.',
+  'Proof submitted — awaiting admin confirmation.':
+      'تم إرسال الإثبات — بانتظار تأكيد الإدارة.',
   'Payment proof rejected': 'تم رفض إثبات الدفع',
   'Re-upload proof': 'إعادة رفع الإثبات',
-  'New proof submitted — awaiting review.': 'تم إرسال إثبات جديد — بانتظار المراجعة.',
+  'New proof submitted — awaiting review.':
+      'تم إرسال إثبات جديد — بانتظار المراجعة.',
   'Remaining': 'المتبقي',
   'Pending': 'قيد الانتظار',
   'Activated': 'تاريخ التفعيل',
@@ -247,18 +252,18 @@ const Map<String, String> _ar = {
   'No reviews yet.': 'لا توجد تقييمات بعد.',
   'Reviews': 'التقييمات',
   'Sign out': 'تسجيل الخروج',
-  'Upcoming sessions': 'الجلسات القادمة',
   'Buy a package with': 'شراء باقة مع',
-  'Member': 'عضو',
   'Create account': 'إنشاء الحساب',
   'A few quick questions': 'بعض الأسئلة السريعة',
   'Choose': 'اختر',
   'Date of birth': 'تاريخ الميلاد',
   'Location (city / area)': 'الموقع (المدينة / المنطقة)',
   'Nationality': 'الجنسية',
-  'Documents (pdf, doc, docx, jpg, png)': 'المستندات (pdf, doc, docx, jpg, png)',
+  'Documents (pdf, doc, docx, jpg, png)':
+      'المستندات (pdf, doc, docx, jpg, png)',
   'No file selected': 'لم يتم اختيار ملف',
-  'Enter the verification code sent to your phone.': 'أدخل رمز التحقق المرسل إلى هاتفك.',
+  'Enter the verification code sent to your phone.':
+      'أدخل رمز التحقق المرسل إلى هاتفك.',
   'Verify & continue': 'تحقق ومتابعة',
   'First name': 'الاسم الأول',
   'Last name': 'اسم العائلة',
@@ -267,16 +272,22 @@ const Map<String, String> _ar = {
   'Verification code': 'رمز التحقق',
   'Contact': 'معلومات التواصل',
   'Fitness questionnaire': 'استبيان اللياقة',
-  'This member has not filled the questionnaire.': 'لم يقم هذا العضو بتعبئة الاستبيان.',
+  'This member has not filled the questionnaire.':
+      'لم يقم هذا العضو بتعبئة الاستبيان.',
   'No packages yet.': 'لا توجد باقات بعد.',
   'used': 'مستخدمة',
   'Home': 'الرئيسية',
-  'This session is today. Cancelling now costs you one session, recorded for the admin.': 'هذه الجلسة اليوم. الإلغاء الآن يكلفك جلسة واحدة تُسجّل للإدارة.',
-  'Session cancelled — one session recorded against you.': 'تم إلغاء الجلسة — تم تسجيل جلسة واحدة عليك.',
+  'This session is today. Cancelling now costs you one session, recorded for the admin.':
+      'هذه الجلسة اليوم. الإلغاء الآن يكلفك جلسة واحدة تُسجّل للإدارة.',
+  'Session cancelled — one session recorded against you.':
+      'تم إلغاء الجلسة — تم تسجيل جلسة واحدة عليك.',
   'Session cancelled.': 'تم إلغاء الجلسة.',
-  'Rejection limit reached — cancel instead': 'تم بلوغ حد الرفض — قم بالإلغاء بدلاً من ذلك',
-  'This session starts within 24 hours. Cancelling now WILL deduct a class from your package.': 'تبدأ هذه الجلسة خلال 24 ساعة. الإلغاء الآن سيخصم حصة من باقتك.',
-  'This session is more than 24 hours away, so no class will be deducted.': 'موعد هذه الجلسة بعد أكثر من 24 ساعة، لذلك لن يتم خصم أي حصة.',
+  'Rejection limit reached — cancel instead':
+      'تم بلوغ حد الرفض — قم بالإلغاء بدلاً من ذلك',
+  'This session starts within 24 hours. Cancelling now WILL deduct a class from your package.':
+      'تبدأ هذه الجلسة خلال 24 ساعة. الإلغاء الآن سيخصم حصة من باقتك.',
+  'This session is more than 24 hours away, so no class will be deducted.':
+      'موعد هذه الجلسة بعد أكثر من 24 ساعة، لذلك لن يتم خصم أي حصة.',
   'How it works': 'كيف يعمل التطبيق',
   'Rules & regulations': 'القواعد والأحكام',
   'Watch how CoachlyJo works': 'شاهد كيف يعمل كوتشلي جو',
@@ -284,14 +295,17 @@ const Map<String, String> _ar = {
   'Cancel session': 'إلغاء الجلسة',
   'Why are you cancelling?': 'ما سبب الإلغاء؟',
   'Reason (required)': 'السبب (مطلوب)',
-  'The member keeps their class. Cancelling on the same day costs you one session.': 'يحتفظ العضو بحصته. الإلغاء في نفس اليوم يكلفك جلسة واحدة.',
-  'You have used all 3 cancellations for this package.': 'لقد استخدمت جميع مرات الإلغاء الثلاث لهذه الباقة.',
+  'The member keeps their class. Cancelling on the same day costs you one session.':
+      'يحتفظ العضو بحصته. الإلغاء في نفس اليوم يكلفك جلسة واحدة.',
+  'You have used all 3 cancellations for this package.':
+      'لقد استخدمت جميع مرات الإلغاء الثلاث لهذه الباقة.',
   'cancellations left': 'مرات إلغاء متبقية',
   'Sessions owed': 'جلسات مستحقة عليك',
   'rejections used': 'مرات رفض مستخدمة',
   'Notifications': 'الإشعارات',
   'Mark all read': 'تعليم الكل كمقروء',
-  'No notifications yet. Updates about your sessions and packages appear here.': 'لا توجد إشعارات بعد. ستظهر هنا التحديثات المتعلقة بجلساتك وباقاتك.',
+  'No notifications yet. Updates about your sessions and packages appear here.':
+      'لا توجد إشعارات بعد. ستظهر هنا التحديثات المتعلقة بجلساتك وباقاتك.',
   'just now': 'الآن',
   'm ago': ' د',
   'h ago': ' س',
@@ -301,10 +315,13 @@ const Map<String, String> _ar = {
   'Privacy Policy': 'سياسة الخصوصية',
   'Terms of Service': 'شروط الاستخدام',
   'Delete account': 'حذف الحساب',
-  'Permanently remove your account and personal data': 'إزالة حسابك وبياناتك الشخصية نهائياً',
+  'Permanently remove your account and personal data':
+      'إزالة حسابك وبياناتك الشخصية نهائياً',
   'This permanently deletes your account': 'سيؤدي هذا إلى حذف حسابك نهائياً',
-  'We erase your name, email, phone number, date of birth, location, questionnaire answers, uploaded documents and payment-proof images, and your notifications.': 'نمسح اسمك وبريدك الإلكتروني ورقم هاتفك وتاريخ ميلادك وموقعك وإجابات الاستبيان والمستندات المرفوعة وصور إثبات الدفع وإشعاراتك.',
-  'We keep an anonymised record of completed purchases where accounting law requires it. It cannot identify you.': 'نحتفظ بسجل مجهول الهوية لعمليات الشراء المكتملة عند اشتراط القانون المحاسبي ذلك، ولا يمكنه التعرف عليك.',
+  'We erase your name, email, phone number, date of birth, location, questionnaire answers, uploaded documents and payment-proof images, and your notifications.':
+      'نمسح اسمك وبريدك الإلكتروني ورقم هاتفك وتاريخ ميلادك وموقعك وإجابات الاستبيان والمستندات المرفوعة وصور إثبات الدفع وإشعاراتك.',
+  'We keep an anonymised record of completed purchases where accounting law requires it. It cannot identify you.':
+      'نحتفظ بسجل مجهول الهوية لعمليات الشراء المكتملة عند اشتراط القانون المحاسبي ذلك، ولا يمكنه التعرف عليك.',
   'Before you go': 'قبل أن تغادر',
   'upcoming session(s) will be cancelled': 'جلسة قادمة سيتم إلغاؤها',
   'unused class(es) will be lost': 'حصة غير مستخدمة ستفقدها',
@@ -313,9 +330,110 @@ const Map<String, String> _ar = {
   'Delete my account': 'حذف حسابي',
   'Keep my account': 'الاحتفاظ بحسابي',
   'Delete your account?': 'هل تريد حذف حسابك؟',
-  'This cannot be undone. Your personal data will be erased and your upcoming sessions cancelled.': 'لا يمكن التراجع عن هذا. سيتم مسح بياناتك الشخصية وإلغاء جلساتك القادمة.',
+  'This cannot be undone. Your personal data will be erased and your upcoming sessions cancelled.':
+      'لا يمكن التراجع عن هذا. سيتم مسح بياناتك الشخصية وإلغاء جلساتك القادمة.',
   'Delete permanently': 'حذف نهائي',
-  'Your account and personal data have been deleted.': 'تم حذف حسابك وبياناتك الشخصية.',
+  'Your account and personal data have been deleted.':
+      'تم حذف حسابك وبياناتك الشخصية.',
+  // --- v0.14: profile completion, calendar, theme, contact ---
+  'Complete profile': 'إكمال الملف الشخصي',
+  'Complete your profile': 'أكمل ملفك الشخصي',
+  'A few more details so your coach can train you safely.':
+      'بعض التفاصيل الإضافية ليتمكن مدربك من تدريبك بأمان.',
+  'We need a few details and your certificates before an admin can approve you.':
+      'نحتاج بعض التفاصيل وشهاداتك قبل أن تتم الموافقة على حسابك.',
+  'Not set': 'غير محدد',
+  'Your area': 'منطقتك',
+  'Area in Amman': 'المنطقة في عمّان',
+  'Only your coach sees these answers.': 'مدربك فقط يطّلع على هذه الإجابات.',
+  'Years of experience': 'سنوات الخبرة',
+  'Used to write your profile bio automatically.':
+      'تُستخدم لكتابة نبذتك تلقائياً.',
+  'What is your specialty?': 'ما هو تخصصك؟',
+  'Certificates & experience proof': 'الشهادات وإثبات الخبرة',
+  'Required': 'مطلوب',
+  'PDF, Word, JPG or PNG. Up to 10 MB each.':
+      'PDF أو Word أو JPG أو PNG. بحد أقصى 10 ميغابايت لكل ملف.',
+  'Add document': 'إضافة مستند',
+  'Profile photo': 'الصورة الشخصية',
+  'Optional — members see this on your profile':
+      'اختياري — يراها الأعضاء في ملفك',
+  'Save and continue': 'حفظ ومتابعة',
+  'Profile completed. You are all set!': 'تم إكمال الملف الشخصي. كل شيء جاهز!',
+  'Please choose your date of birth': 'يرجى اختيار تاريخ ميلادك',
+  'Please choose your area': 'يرجى اختيار منطقتك',
+  'Please answer all the questions': 'يرجى الإجابة على جميع الأسئلة',
+  'Please enter your years of experience': 'يرجى إدخال سنوات خبرتك',
+  'Please choose at least one specialty': 'يرجى اختيار تخصص واحد على الأقل',
+  'Please upload at least one certificate or proof of experience':
+      'يرجى رفع شهادة واحدة على الأقل أو إثبات خبرة',
+  'You will add a few more details after signing in.':
+      'ستضيف بعض التفاصيل بعد تسجيل الدخول.',
+  'Search nationality': 'ابحث عن الجنسية',
+  'Tap to select': 'اضغط للاختيار',
+  'Awaiting admin approval': 'بانتظار موافقة الإدارة',
+  'Your application was not approved': 'لم تتم الموافقة على طلبك',
+  'Please contact CoachlyJo support.': 'يرجى التواصل مع دعم كوتشلي جو.',
+  'Your documents are with our team. You can set your availability as soon as you are approved.':
+      'مستنداتك لدى فريقنا. يمكنك تحديد أوقاتك فور الموافقة على حسابك.',
+  'Complete your profile and upload your certificates so an admin can review you.':
+      'أكمل ملفك وارفع شهاداتك لتتمكن الإدارة من مراجعتك.',
+  'Cancellation policy': 'سياسة الإلغاء',
+  'Contact us': 'تواصل معنا',
+  'We are here to help': 'نحن هنا للمساعدة',
+  'Questions about a package, a session or your account? Reach us any way you like.':
+      'أسئلة حول باقة أو جلسة أو حسابك؟ تواصل معنا بالطريقة التي تناسبك.',
+  'Phone': 'الهاتف',
+  'Could not open that app on this device.':
+      'تعذر فتح هذا التطبيق على هذا الجهاز.',
+  'Contact details have not been added yet.':
+      'لم تتم إضافة بيانات التواصل بعد.',
+  'Appearance': 'المظهر',
+  'System': 'النظام',
+  'Light': 'فاتح',
+  'Dark': 'داكن',
+  'Update the password you sign in with':
+      'تحديث كلمة المرور التي تسجل بها الدخول',
+  'Email, phone and Instagram': 'البريد والهاتف وإنستغرام',
+  'Members see this on your profile. It is optional.':
+      'يراها الأعضاء في ملفك. وهي اختيارية.',
+  'Choose photo': 'اختيار صورة',
+  'Remove': 'إزالة',
+  'Photo updated.': 'تم تحديث الصورة.',
+  'Photo removed.': 'تمت إزالة الصورة.',
+  'Signed in': 'تم تسجيل الدخول',
+  'Administrator': 'مدير',
+  'Member': 'عضو',
+  // calendar
+  'Tap an hour to open or close it': 'اضغط على الساعة لفتحها أو إغلاقها',
+  'Previous week': 'الأسبوع السابق',
+  'Next week': 'الأسبوع التالي',
+  'Copy last week': 'نسخ الأسبوع الماضي',
+  'Clear week': 'مسح الأسبوع',
+  'Clear this week?': 'مسح هذا الأسبوع؟',
+  'All open hours this week are removed. Booked sessions are kept.':
+      'سيتم إزالة جميع الساعات المتاحة هذا الأسبوع. تبقى الجلسات المحجوزة.',
+  'Booked': 'محجوز',
+  'That hour has a booked session and cannot be removed.':
+      'هذه الساعة تحتوي على جلسة محجوزة ولا يمكن إزالتها.',
+  'Remove hours from the start or the end of a block.':
+      'أزل الساعات من بداية أو نهاية الفترة.',
+  'Long-press a block to switch it between online and in-person. Booked hours are locked.':
+      'اضغط مطولاً على الفترة لتبديلها بين أونلاين وحضوري. الساعات المحجوزة مقفلة.',
+  'Upcoming sessions': 'الجلسات القادمة',
+  // specialties
+  'Strength training': 'تدريب القوة',
+  'Weight loss': 'إنقاص الوزن',
+  'Muscle building': 'بناء العضلات',
+  'Functional fitness': 'اللياقة الوظيفية',
+  'CrossFit': 'كروس فيت',
+  'Boxing': 'الملاكمة',
+  'Yoga': 'اليوغا',
+  'Pilates': 'بيلاتس',
+  'Mobility': 'المرونة',
+  'Rehabilitation': 'إعادة التأهيل',
+  'Nutrition coaching': 'الإرشاد الغذائي',
+  'Cardio & endurance': 'الكارديو والتحمل',
   // --- settings ---
   'Language': 'اللغة',
   'Change bio': 'تعديل النبذة',

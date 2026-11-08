@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'motion_v0_13.dart';
+import 'api_v0_13.dart';
 export 'background_v0_13.dart';
 
 /// =============================================================================
@@ -48,12 +50,32 @@ class Brand {
   );
 
   static const appName = 'CoachlyJo';
+
+  // ---- (v0.14 item 12) Light palette ----------------------------------------
+  // The brand hues are darkened for light mode: #C91E97 on white is readable,
+  // but the orange needs taking down or it vibrates against pale surfaces.
+  static const magentaLight = Color(0xFFB01485);
+  static const orangeLight = Color(0xFFB85C06);
+  static const backgroundLight = Color(0xFFF7F6F9);
+  static const surfaceLight = Color(0xFFFFFFFF);
+  static const surfaceHighLight = Color(0xFFF0EEF4);
+  static const onSurfaceLight = Color(0xFF1B1B22);
+  static const mutedLight = Color(0xFF6B6B7A);
+
+  /// Brand gradient for the active brightness.
+  static LinearGradient gradientFor(Brightness b) => b == Brightness.light
+      ? const LinearGradient(
+          colors: [magentaLight, orangeLight],
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight)
+      : gradient;
 }
 
 /// Builds the CoachlyJo dark theme with the given accent as primary.
 /// member -> magenta, coach -> orange, admin/login -> magenta primary with
 /// orange secondary (the neutral "both" identity).
-ThemeData coachlyTheme({Color accent = Brand.magenta}) {
+ThemeData coachlyTheme({Color accent = Brand.magenta, Brightness brightness = Brightness.dark}) {
+  if (brightness == Brightness.light) return _coachlyLightTheme(accent);
   final secondary = accent == Brand.orange ? Brand.magenta : Brand.orange;
   final scheme = ColorScheme.dark(
     primary: accent,
@@ -514,17 +536,178 @@ class StatusPill extends StatelessWidget {
 class EmptyState extends StatelessWidget {
   final IconData icon;
   final String message;
-  const EmptyState({super.key, required this.icon, required this.message});
+  /// (v0.14 item 19) Optional gym illustration instead of a plain icon badge.
+  final Widget? art;
+  const EmptyState({super.key, required this.icon, required this.message, this.art});
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(32, 48, 32, 32),
       child: Column(children: [
-        GradientIconBadge(icon: icon, size: 56),
+        art ?? GradientIconBadge(icon: icon, size: 56),
         const SizedBox(height: 14),
         Text(message, textAlign: TextAlign.center,
-            style: const TextStyle(color: Color(0xFF9A9AA6), height: 1.4)),
+            style: TextStyle(
+                color: Theme.of(context).brightness == Brightness.light
+                    ? Brand.mutedLight : const Color(0xFF9A9AA6),
+                height: 1.4)),
       ]),
     );
+  }
+}
+
+// =============================================================================
+// (v0.14 item 12) Light theme.
+//
+// Not a tinted copy of the dark one: surfaces, borders, muted text and the
+// brand tones are all chosen for contrast on white. The same widgets
+// (HeroPanel, BrandCard, StatusPill…) read their colours from the active
+// ColorScheme, so both themes stay in step as screens change.
+// =============================================================================
+ThemeData _coachlyLightTheme(Color accent) {
+  // Map the dark working tones onto their light-mode equivalents.
+  final a = accent == Brand.orange ? Brand.orangeLight : Brand.magentaLight;
+  final secondary = accent == Brand.orange ? Brand.magentaLight : Brand.orangeLight;
+
+  final scheme = ColorScheme.light(
+    primary: a,
+    onPrimary: Colors.white,
+    secondary: secondary,
+    onSecondary: Colors.white,
+    surface: Brand.surfaceLight,
+    onSurface: Brand.onSurfaceLight,
+    surfaceContainerHighest: Brand.surfaceHighLight,
+    secondaryContainer: a.withValues(alpha: 0.10),
+    onSecondaryContainer: Brand.onSurfaceLight,
+    error: const Color(0xFFC62348),
+    outline: const Color(0xFFD6D3DE),
+  );
+
+  return ThemeData(
+    useMaterial3: true,
+    brightness: Brightness.light,
+    colorScheme: scheme,
+    scaffoldBackgroundColor: Brand.backgroundLight,
+    appBarTheme: const AppBarTheme(
+      backgroundColor: Colors.transparent,
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+      centerTitle: false,
+      titleTextStyle: TextStyle(
+          fontSize: 20, fontWeight: FontWeight.w800, color: Brand.onSurfaceLight),
+      iconTheme: IconThemeData(color: Brand.onSurfaceLight),
+    ),
+    cardTheme: CardThemeData(
+      color: Brand.surfaceLight,
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: a.withValues(alpha: 0.14)),
+      ),
+    ),
+    navigationBarTheme: NavigationBarThemeData(
+      backgroundColor: Brand.surfaceLight,
+      indicatorColor: a.withValues(alpha: 0.14),
+      surfaceTintColor: Colors.transparent,
+      iconTheme: WidgetStateProperty.resolveWith((states) => IconThemeData(
+            color: states.contains(WidgetState.selected) ? a : Brand.mutedLight,
+          )),
+      labelTextStyle: WidgetStateProperty.resolveWith((states) => TextStyle(
+            fontSize: 12,
+            fontWeight: states.contains(WidgetState.selected) ? FontWeight.w600 : FontWeight.w400,
+            color: states.contains(WidgetState.selected) ? a : Brand.mutedLight,
+          )),
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(
+        backgroundColor: a,
+        foregroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    ),
+    segmentedButtonTheme: SegmentedButtonThemeData(
+      style: ButtonStyle(
+        backgroundColor: WidgetStateProperty.resolveWith((states) =>
+            states.contains(WidgetState.selected) ? a.withValues(alpha: 0.12) : Brand.surfaceLight),
+        foregroundColor: WidgetStateProperty.resolveWith((states) =>
+            states.contains(WidgetState.selected) ? a : Brand.mutedLight),
+        side: WidgetStateProperty.all(const BorderSide(color: Color(0xFFD6D3DE))),
+      ),
+    ),
+    chipTheme: ChipThemeData(
+      backgroundColor: Brand.surfaceHighLight,
+      side: const BorderSide(color: Color(0xFFD6D3DE)),
+      labelStyle: const TextStyle(color: Brand.onSurfaceLight),
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: Brand.surfaceLight,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Color(0xFFD6D3DE)),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Color(0xFFD6D3DE)),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: a, width: 1.6),
+      ),
+      labelStyle: const TextStyle(color: Brand.mutedLight),
+      hintStyle: const TextStyle(color: Brand.mutedLight),
+    ),
+    dialogTheme: DialogThemeData(
+      backgroundColor: Brand.surfaceLight,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+    ),
+    snackBarTheme: const SnackBarThemeData(
+      backgroundColor: Color(0xFF2A2A34),
+      contentTextStyle: TextStyle(color: Colors.white),
+      behavior: SnackBarBehavior.floating,
+    ),
+    dividerTheme: const DividerThemeData(color: Color(0xFFE6E3EC)),
+    listTileTheme: const ListTileThemeData(iconColor: Brand.mutedLight),
+    expansionTileTheme: const ExpansionTileThemeData(
+      iconColor: Brand.mutedLight,
+      collapsedIconColor: Brand.mutedLight,
+      shape: Border(),
+      collapsedShape: Border(),
+    ),
+  );
+}
+
+/// (v0.14 item 12) Theme choice: system, light or dark. Saved per device and
+/// mirrored to the account so it follows the user to a new phone.
+class AppTheme extends ChangeNotifier {
+  static const _key = 'coachlyjo_theme';
+  String mode = 'dark';   // 'system' | 'light' | 'dark'
+
+  ThemeMode get themeMode => mode == 'light'
+      ? ThemeMode.light
+      : mode == 'system'
+          ? ThemeMode.system
+          : ThemeMode.dark;
+
+  Future<void> load() async {
+    final prefs = await SharedPreferences.getInstance();
+    mode = prefs.getString(_key) ?? 'dark';
+    notifyListeners();
+  }
+
+  Future<void> set(String m, {bool syncToServer = true}) async {
+    if (!['system', 'light', 'dark'].contains(m)) return;
+    mode = m;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_key, m);
+    if (syncToServer) {
+      // Best effort: the local choice is what the app renders from.
+      try {
+        await ApiClient.instance.put('/api/profile/theme', {'theme': m});
+      } catch (_) {}
+    }
   }
 }

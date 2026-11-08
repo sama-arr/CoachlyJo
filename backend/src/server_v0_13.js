@@ -105,6 +105,8 @@ app.use('/api/bookings', require('./routes/bookings_v0_13'));
 app.use('/api/notifications', require('./routes/notifications_v0_13'));
 app.use('/api/admin', require('./routes/admin_v0_13'));
 app.use('/api/account', require('./routes/account_v0_13'));
+app.use('/api/profile', require('./routes/profile_v0_13').router);
+app.use('/api/push', require('./routes/push_v0_13'));
 
 // (v0.13) Public pages required by the stores: a privacy policy URL and a
 // web account-deletion request form that works without the app installed.
@@ -156,7 +158,8 @@ if (require.main === module) {
     runScheduledNotifications().catch((e) => console.error('[notifications] startup run failed:', e.message));
     setInterval(() => {
       runScheduledNotifications().catch((e) => console.error('[notifications] periodic run failed:', e.message));
-    }, 15 * 60 * 1000);
+      // (v0.14 item 13) 5-minute tick so the 15-minute reminder is accurate.
+    }, 5 * 60 * 1000);
   });
 }
 

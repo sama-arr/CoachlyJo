@@ -61,7 +61,11 @@ class _GlowBackgroundState extends State<GlowBackground>
           child: AnimatedBuilder(
             animation: _c,
             builder: (_, __) => CustomPaint(
-              painter: _AuroraPainter(t: reduceMotion ? 0.15 : _c.value, accent: accent),
+              painter: _AuroraPainter(
+                t: reduceMotion ? 0.15 : _c.value,
+                accent: accent,
+                light: Theme.of(context).brightness == Brightness.light,
+              ),
               isComplex: true,
               willChange: !reduceMotion,
             ),
@@ -77,7 +81,8 @@ class _AuroraPainter extends CustomPainter {
   /// 0..1 loop position.
   final double t;
   final Color accent;
-  _AuroraPainter({required this.t, required this.accent});
+  final bool light;
+  _AuroraPainter({required this.t, required this.accent, required this.light});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -85,7 +90,11 @@ class _AuroraPainter extends CustomPainter {
     final tau = math.pi * 2;
 
     // ---- 1. base ----
-    canvas.drawRect(Offset.zero & size, Paint()..color = Brand.background);
+    // (v0.14 item 12) The aurora is far subtler on a light background: the same
+    // blobs at full strength would look like smudges on white.
+    canvas.drawRect(Offset.zero & size,
+        Paint()..color = light ? Brand.backgroundLight : Brand.background);
+    final intensity = light ? 0.35 : 1.0;
 
     // ---- 2. drifting aurora blobs ----
     // Each blob: base position, radius, colour, and its own phase/speed so the
@@ -106,8 +115,8 @@ class _AuroraPainter extends CustomPainter {
       final paint = Paint()
         ..shader = RadialGradient(
           colors: [
-            b.color.withValues(alpha: b.alpha),
-            b.color.withValues(alpha: b.alpha * 0.45),
+            b.color.withValues(alpha: b.alpha * intensity),
+            b.color.withValues(alpha: b.alpha * 0.45 * intensity),
             b.color.withValues(alpha: 0),
           ],
           stops: const [0.0, 0.45, 1.0],
@@ -132,8 +141,8 @@ class _AuroraPainter extends CustomPainter {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Colors.white.withValues(alpha: 0.018),
-              Colors.white.withValues(alpha: 0.004),
+              (light ? Colors.black : Colors.white).withValues(alpha: light ? 0.010 : 0.018),
+              (light ? Colors.black : Colors.white).withValues(alpha: 0.004),
               Colors.transparent,
             ],
           ).createShader(Rect.fromLTWH(0, 0, w, h)),
@@ -142,7 +151,7 @@ class _AuroraPainter extends CustomPainter {
 
     // ---- 4. subtle grid ----
     final grid = Paint()
-      ..color = Colors.white.withValues(alpha: 0.014)
+      ..color = (light ? Colors.black : Colors.white).withValues(alpha: light ? 0.022 : 0.014)
       ..strokeWidth = 1;
     const step = 46.0;
     for (double x = 0; x < w; x += step) {
@@ -152,64 +161,14 @@ class _AuroraPainter extends CustomPainter {
       canvas.drawLine(Offset(0, y), Offset(w, y), grid);
     }
 
-    // ---- 5. fitness motif: a heartbeat line sweeping the lower third ----
-    _drawPulse(canvas, size);
-  }
-
-  /// ECG-style trace: a flat baseline with a spike, drifting sideways, with a
-  /// brighter "head" so it reads as a live signal rather than decoration.
-  void _drawPulse(Canvas canvas, Size size) {
-    final w = size.width, h = size.height;
-    final baseY = h * 0.80;
-    final path = Path();
-    final amp = h * 0.035;
-
-    // Sweep position of the beat.
-    final sweep = (t * 1.0) % 1.0;
-    final beatX = sweep * (w * 1.4) - w * 0.2;
-
-    path.moveTo(-20, baseY);
-    // Flat line up to the beat.
-    path.lineTo(beatX - 60, baseY);
-    // The beat itself: small dip, tall spike, dip, small bump.
-    path.lineTo(beatX - 46, baseY + amp * 0.35);
-    path.lineTo(beatX - 30, baseY - amp * 0.2);
-    path.lineTo(beatX - 14, baseY - amp * 1.9);
-    path.lineTo(beatX, baseY + amp * 1.1);
-    path.lineTo(beatX + 14, baseY - amp * 0.35);
-    path.lineTo(beatX + 34, baseY);
-    // Flat line onwards.
-    path.lineTo(w + 20, baseY);
-
-    canvas.drawPath(
-      path,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.6
-        ..strokeJoin = StrokeJoin.round
-        ..shader = LinearGradient(
-          colors: [
-            Brand.magenta.withValues(alpha: 0.0),
-            Brand.magenta.withValues(alpha: 0.16),
-            Brand.orange.withValues(alpha: 0.22),
-            Brand.orange.withValues(alpha: 0.0),
-          ],
-          stops: const [0.0, 0.35, 0.65, 1.0],
-        ).createShader(Rect.fromLTWH(0, baseY - amp * 2, w, amp * 4)),
-    );
-
-    // Glowing head at the beat.
-    canvas.drawCircle(
-      Offset(beatX + 34, baseY),
-      3.2,
-      Paint()
-        ..color = Brand.orange.withValues(alpha: 0.35)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
-    );
+    // (v0.14 item 18) The heartbeat motif was removed — testers found it
+    // distracting. Gym imagery now lives in the content itself (see
+    // gym_art_v0_13.dart) rather than animating behind every screen.
   }
 
   @override
-  bool shouldRepaint(covariant _AuroraPainter old) => old.t != t || old.accent != accent;
+  bool shouldRepaint(covariant _AuroraPainter old) =>
+      old.t != t || old.accent != accent || old.light != light;
 }
 
 class _Blob {

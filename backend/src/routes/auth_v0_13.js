@@ -3,7 +3,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { pool, withTransaction } = require('../db/pool_v0_13');
 const { sign, authenticate } = require('../middleware/auth_v0_13');
-const { sendMail } = require('../services/mail.service_v0_13');
+const { sendCodeEmail } = require('../services/mail.service_v0_13');
 const { notifyAdmins } = require('../services/notification.service_v0_13');
 
 const router = express.Router();
@@ -27,12 +27,17 @@ function normalizePhone(raw) {
   return '009627' + digits.slice(2); // drop leading "07", keep subscriber number
 }
 
-// --- Member registration (spec §3) — v0.2: + location ---
+// --- Member registration ---
+// (v0.14 item 1) Short signup: name, email, phone, password, nationality.
+// Date of birth, location and the fitness questionnaire now belong to the
+// Complete Profile step inside the app (item 2). Birth place is gone for good.
+// `location`, `dateOfBirth` and `assessment` are still accepted so that older
+// app builds already in testers' hands keep working.
 router.post('/register/member', async (req, res) => {
-  const { email, phone, password, firstName, lastName, location,
-          dateOfBirth, birthPlace, nationality, assessment } = req.body || {};
-  if (!email || !phone || !validPassword(password) || !firstName || !lastName)
-    return res.status(400).json({ error: 'email, phone, firstName, lastName and password (min 8) required' });
+  const { email, phone, password, firstName, lastName, nationality,
+          location, dateOfBirth, assessment } = req.body || {};
+  if (!email || !phone || !validPassword(password) || !firstName || !lastName || !nationality)
+    return res.status(400).json({ error: 'firstName, lastName, email, phone, password (min 8) and nationality are required' });
   if (!validEmail(email)) return res.status(400).json({ error: 'Invalid email format' });
   const normPhone = normalizePhone(phone);
   if (!normPhone) return res.status(400).json({ error: 'Phone must be 10 digits starting with 0 (e.g. 0791234567)' });
@@ -46,9 +51,9 @@ router.post('/register/member', async (req, res) => {
       );
       const user = u.rows[0];
       await client.query(
-        `INSERT INTO member_profiles (user_id, first_name, last_name, location, date_of_birth, birth_place, nationality)
-         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-        [user.id, firstName, lastName, location || null, dateOfBirth || null, birthPlace || null, nationality || null]
+        `INSERT INTO member_profiles (user_id, first_name, last_name, location, date_of_birth, nationality)
+         VALUES ($1,$2,$3,$4,$5,$6)`,
+        [user.id, firstName, lastName, location || null, dateOfBirth || null, nationality]
       );
       if (assessment) {
         await client.query(
@@ -78,20 +83,23 @@ const ALLOWED_DOC_MIME = {
 const MAX_DOC_BYTES = 10 * 1024 * 1024; // 10 MB cap (item 1)
 
 router.post('/register/coach', async (req, res) => {
-  const { email, phone, password, firstName, lastName, dateOfBirth, nationality,
-          birthPlace, location, bio, documents } = req.body || {};
-  if (!email || !phone || !validPassword(password) || !firstName || !lastName || !dateOfBirth || !nationality)
-    return res.status(400).json({ error: 'All coach fields and password (min 8) required' });
+  // (v0.14 item 1) Short signup for coaches too. Date of birth, bio, specialty,
+  // experience, photo and the verification DOCUMENTS all move to Complete
+  // Profile (items 2 and 4) — documents are required there before an admin can
+  // approve the coach. `documents` is still accepted here for older builds.
+  const { email, phone, password, firstName, lastName, nationality, documents } = req.body || {};
+  if (!email || !phone || !validPassword(password) || !firstName || !lastName || !nationality)
+    return res.status(400).json({ error: 'firstName, lastName, email, phone, password (min 8) and nationality are required' });
   if (!validEmail(email)) return res.status(400).json({ error: 'Invalid email format' });
   const normPhone = normalizePhone(phone);
   if (!normPhone) return res.status(400).json({ error: 'Phone must be 10 digits starting with 0 (e.g. 0791234567)' });
 
   const docs = Array.isArray(documents) ? documents : [];
   for (const d of docs) {
-    if (!ALLOWED_DOC_MIME[d.mimeType])
-      return res.status(400).json({ error: `Unsupported file type ${d.mimeType}. Allowed: pdf, doc, docx, jpg, png` });
-    const size = Buffer.byteLength(d.dataBase64 || '', 'base64');
-    if (size > MAX_DOC_BYTES) return res.status(400).json({ error: `File ${d.fileName} exceeds 10MB` });
+    if (!d || !d.dataBase64 || !ALLOWED_DOC_MIME[d.mimeType])
+      return res.status(400).json({ error: 'Documents must be PDF, Word, JPG or PNG' });
+    if (Buffer.from(d.dataBase64, 'base64').length > MAX_DOC_BYTES)
+      return res.status(400).json({ error: 'Each document must be 10 MB or smaller' });
   }
 
   try {
@@ -103,10 +111,13 @@ router.post('/register/coach', async (req, res) => {
       );
       const user = u.rows[0];
       await client.query(
-        `INSERT INTO coach_profiles (user_id, first_name, last_name, date_of_birth, nationality, birth_place, location, bio_en)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-        [user.id, firstName, lastName, dateOfBirth, nationality, birthPlace || null, location || null, bio || null]
+        `INSERT INTO coach_profiles (user_id, first_name, last_name, nationality)
+         VALUES ($1,$2,$3,$4)`,
+        [user.id, firstName, lastName, nationality]
       );
+      // Optional at signup now (item 1): documents are collected and REQUIRED
+      // during Complete Profile (items 2, 4). Older app builds still post them
+      // here, so they are accepted and validated.
       for (const d of docs) {
         await client.query(
           `INSERT INTO coach_documents (coach_id, doc_type, content, mime_type, file_name, byte_size)
@@ -258,6 +269,21 @@ router.get('/questionnaire', async (req, res) => {
   res.json(r.rows);
 });
 
+// (v0.14 item 6) Contact details for the Contact Us screen. Public so the
+// screen works before sign-in; the admin edits these from Setup.
+router.get('/contact', async (req, res) => {
+  const r = await pool.query(
+    `SELECT contact_email, contact_phone, contact_instagram, contact_whatsapp
+       FROM platform_settings WHERE id=1`);
+  const c = r.rows[0] || {};
+  res.json({
+    email: c.contact_email || '',
+    phone: c.contact_phone || '',
+    instagram: c.contact_instagram || '',
+    whatsapp: c.contact_whatsapp || '',
+  });
+});
+
 // --- Public: active locations for the registration dropdown (items 10,11) ---
 router.get('/locations', async (req, res) => {
   const r = await pool.query(
@@ -306,11 +332,8 @@ router.post('/forgot-password', async (req, res) => {
      VALUES ($1, $2, now() + ($3 || ' minutes')::interval)`,
     [user.id, hash, String(RESET_TTL_MIN)]);
 
-  await sendMail({
-    to: user.email,
-    subject: 'Your password reset code',
-    text: `Your password reset code is: ${code}\n\nIt expires in ${RESET_TTL_MIN} minutes. If you did not request this, you can ignore this email.`,
-  });
+  // (v0.14 item 10) Branded HTML email with a plain-text fallback.
+  await sendCodeEmail({ to: user.email, code, kind: 'reset', minutes: RESET_TTL_MIN });
   if (DEV_OTP) console.log(`[DEV RESET] ${user.email} code = ${code}`);
   res.json({ message: RESET_NEUTRAL, devCode: DEV_OTP ? code : undefined });
 });
@@ -517,11 +540,7 @@ async function issueOtp(userId) {
   // v0.5: also send by email when SMTP is configured (no-op in dev mode).
   const u = await pool.query(`SELECT email FROM users WHERE id=$1`, [userId]);
   if (u.rowCount > 0) {
-    sendMail({
-      to: u.rows[0].email,
-      subject: 'Your verification code',
-      text: `Your verification code is: ${code}\n\nIt expires in 10 minutes.`,
-    });
+    sendCodeEmail({ to: u.rows[0].email, code, kind: 'verify' });
   }
   return code;
 }

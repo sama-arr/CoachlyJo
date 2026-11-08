@@ -1,4 +1,4 @@
-# CoachlyJo — Fitness Coaching Platform (v0.13)
+# CoachlyJo — Fitness Coaching Platform (v0.14 · app 1.1.0+2)
 
 A mobile fitness-coaching platform connecting **Members** (clients) with verified **Coaches** for online and in-person sessions. Built per the consolidated spec v1.0.
 
@@ -117,7 +117,7 @@ and falls back to a placeholder so bookings are never blocked.
 
 > **Upgrading from an earlier version?** Just run `npm run migrate` on your
 > existing database — it is idempotent and applies only what is missing, then
-> `GET /health/schema` should report `{"current":13,"expected":13,"upToDate":true}`.
+> `GET /health/schema` should report `{"current":14,"expected":14,"upToDate":true}`.
 > No reseeding needed. 
 
 ```bash
@@ -147,6 +147,50 @@ Admin: admin@fitness.local / admin1234
 > const/i18n misuse, unused private members, and every frontend API path against
 > the backend routes). `flutter analyze` remains the authoritative check.
 
+
+## Push notifications (v0.14)
+
+The app ships complete without Firebase: notifications appear in the in-app
+centre and by email, and `PushService.init()` fails soft. Add the three pieces
+below and OS notifications start working with **no code change and no new
+build logic** — just a rebuild.
+
+### 1. Firebase project
+1. console.firebase.google.com → **Add project** → name it `CoachlyJo`
+2. **Add app → Android**, package name `com.coachlyjo.app` →
+   download `google-services.json` → put it in `frontend/android/app/`
+3. **Add app → iOS**, bundle ID `com.coachlyjo.app` →
+   download `GoogleService-Info.plist` → add it to `frontend/ios/Runner/`
+   **in Xcode** (drag into the Runner target so it is bundled, not just copied)
+
+### 2. iOS push key (Apple)
+1. developer.apple.com → Certificates, Identifiers & Profiles → **Keys** → **+**
+2. Tick **Apple Push Notifications service (APNs)**, create, download the `.p8`
+   (you can only download it once)
+3. Firebase console → Project settings → **Cloud Messaging** → iOS app →
+   **Upload** the `.p8`, with your Key ID and Team ID
+4. In Xcode, enable the **Push Notifications** capability on the Runner target
+
+### 3. Server credentials
+Firebase console → Project settings → **Service accounts** → **Generate new
+private key**. From the JSON, set on Render:
+
+```
+FIREBASE_PROJECT_ID=coachlyjo-xxxx
+FIREBASE_CLIENT_EMAIL=firebase-adminsdk-xxxxx@coachlyjo-xxxx.iam.gserviceaccount.com
+FIREBASE_PRIVATE_KEY=-----BEGIN PRIVATE KEY-----\nMIIE...\n-----END PRIVATE KEY-----\n
+```
+
+Paste the private key exactly as it appears in the JSON, `\n` sequences and
+all — the server converts them back to real newlines.
+
+### Checking it works
+Server logs show `[push]` lines only on failure. Register a device (sign in on a
+phone), then trigger any notification — accept a booking, activate a package —
+and it should arrive in the tray. If nothing arrives: confirm the device token
+reached `device_tokens`, and on iOS confirm the APNs key is uploaded, which is
+the usual culprit.
+
 ### 4. Run the API
 
 ```bash
@@ -165,7 +209,7 @@ node tests/e2e_v0_13.js
 
 Expected tail:
 ```
-=== RESULT: 291 passed, 0 failed ===
+=== RESULT: 338 passed, 0 failed ===
 ```
 
 > Check-count history: 123 (v0.4) -> 111 (v0.5) -> 126 (v0.6) -> 137 (v0.7) ->
@@ -331,6 +375,65 @@ Run `npm run migrate` (applies `schema.sql` then `migrate_v0_2.sql`) and `npm ru
 8. **Admin dashboards.** Reports tab now shows headline stats (revenue, sessions completed, active/total members, pending payments/coaches), revenue-per-week and sessions-per-week charts, package sales, and a coach performance leaderboard, all filterable by 7/30/90 days.
 9. **Coach dashboard.** New Dashboard tab for coaches: upcoming sessions, pending requests, completed sessions, active clients, completion rate, rating, and a weekly trend chart. Activity only — no revenue figures are exposed to coaches.
 10. **Coach sees their subscribers.** The Clients tab lists each member subscribed with that coach: package name, sessions used/remaining, expiry, next/last session, and contact details.
+
+### v0.14 — tester feedback round
+
+1. **Short registration**: name, email, phone, password and nationality only.
+   Nationality defaults to **Jordan** and is searchable. Birth place is gone
+   from the product and the database.
+2. **Complete Profile** is a mandatory tab after signing in — date of birth,
+   area and the fitness questionnaire for members; date of birth, years of
+   experience, specialties, **required documents** and an optional photo for
+   coaches. Enforced server-side: no booking or purchase until it is done, and
+   the API returns exactly which fields are missing.
+3. **Coaches are locked until approved**: a permanent "Awaiting admin approval"
+   banner, and the schedule tabs are absent rather than present-but-failing.
+   Enforced on 12 API routes, not just in the UI.
+4. **Documents are required** before a coach can be reviewed.
+5. "Rules & regulations" is now **Cancellation policy**, collapsed by default.
+6. **Contact us** in the drawer and Settings — tappable email, phone, WhatsApp
+   and Instagram, all editable in **Admin → Setup → Contact details**.
+7. **How it works** steps are stacked, not a carousel.
+8. **Change password** is its own screen, opened from a row.
+9. Nationality search, defaulting to Jordan.
+10. **Branded HTML emails** for verification and reset codes — gradient header,
+    the wordmark as styled text (images are blocked by most mail clients),
+    large code block, Arabic RTL version, plain-text fallback.
+11. **Coach experience and specialty** compose the bio automatically in both
+    languages; optional **profile photo**.
+12. **Light / dark / system theme**, chosen in Settings, saved per device and
+    mirrored to the account.
+13. **OS push notifications** via Firebase (see "Push notifications" above) with
+    **15-minute reminders** added to the 24-hour and 1-hour ones, driven by a
+    5-minute scheduler tick.
+14. Notifications can no longer be deleted — they are a record.
+15. Bottom bars show the label **only on the selected tab**, so six tabs stop
+    squeezing.
+16. **Per-week availability calendar**: a real grid of days × hours. Tap an
+    hour to open or close it, long-press a block to switch online/in-person,
+    **Copy last week**, **Clear week**, and booked hours locked. Existing
+    recurring availability is carried forward into 8 weeks of real dates by the
+    migration, so no coach loses their schedule.
+17. Coach dashboard "Upcoming sessions" counts **booked** sessions only.
+18. The heartbeat background animation is gone.
+19. **Gym illustrations** — dumbbell, kettlebell, athlete, trophy, heart-rate and
+    stopwatch — drawn as vectors, so they recolour with the theme and cost
+    kilobytes rather than megabytes.
+20. The "have a lawyer review this" line is removed from the user-facing legal
+    text (still worth doing — just not shown to members).
+21. The settings cog is now a **hamburger opening a slide-out drawer**.
+
+**Also fixed in this release**
+- **Zoom failure no longer blocks acceptance.** Creating the meeting before
+  accepting was right, but throwing meant a coach could not accept *any* online
+  session when Zoom was unconfigured or briefly down. The booking is now
+  accepted, the link is marked pending, and the coach can paste their own
+  Zoom/Meet link (`PUT /api/bookings/:id/meeting-link`).
+- `birth_place` was still written by the account-deletion service and the coach
+  member-detail query; both would have thrown after the column was dropped.
+- The e2e suite is back to green and extended: **338 checks**, covering the
+  two-step password reset, Zoom-before-accept, mode-filtered session lists and
+  every v0.14 feature.
 
 ### v0.13 — App Store / Play Store compliance
 

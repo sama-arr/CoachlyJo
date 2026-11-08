@@ -15,7 +15,8 @@
 // repeat insert a no-op.
 // =============================================================================
 const { pool } = require('../db/pool_v0_13');
-const { sendMail } = require('./mail.service_v0_13');
+const { sendNotificationEmail } = require('./mail.service_v0_13');
+const { sendToUser } = require('./push.service_v0_13');
 
 /**
  * Create one notification. Never throws — a failed notification must never
@@ -47,6 +48,16 @@ async function notify(n) {
        n.relatedId || null, n.dedupeKey || null, n.scheduledAt || null]
     );
     if (res.rowCount === 0) return null;   // duplicate — already delivered
+
+    // (v0.14 item 13) Every notification is also an OS push. No-op until
+    // Firebase credentials are configured; never blocks the caller.
+    sendToUser(n.userId, {
+      title: n.titleEn,
+      body: n.bodyEn || '',
+      type: n.type,
+      relatedId: n.relatedId,
+    }).catch((err) => console.error(`[notify:push] ${err.message}`));
+
     if (n.email) await emailNotification(res.rows[0].id, n);
     return res.rows[0].id;
   } catch (err) {
@@ -59,10 +70,10 @@ async function emailNotification(id, n) {
   try {
     const u = await pool.query(`SELECT email FROM users WHERE id=$1`, [n.userId]);
     if (u.rowCount === 0) return;
-    const sent = await sendMail({
+    const sent = await sendNotificationEmail({
       to: u.rows[0].email,
-      subject: `CoachlyJo — ${n.titleEn}`,
-      text: `${n.titleEn}\n\n${n.bodyEn || ''}\n\n— CoachlyJo`,
+      title: n.titleEn,
+      body: n.bodyEn || '',
     });
     if (sent.sent) await pool.query(`UPDATE notifications SET emailed_at=now() WHERE id=$1`, [id]);
   } catch (err) {
@@ -86,6 +97,8 @@ async function notifyAdmins(n) {
 const REMINDER_WINDOWS = [
   { key: '24h', hours: 24, labelEn: 'tomorrow', labelAr: 'غداً' },
   { key: '1h', hours: 1, labelEn: 'in 1 hour', labelAr: 'خلال ساعة' },
+  // (v0.14 item 13) Final nudge just before the session starts.
+  { key: '15m', hours: 0.25, labelEn: 'in 15 minutes', labelAr: 'خلال 15 دقيقة' },
 ];
 
 async function sendDueReminders() {
@@ -103,8 +116,8 @@ async function sendDueReminders() {
         WHERE b.status = 'accepted'
           AND cs.start_at > now()
           AND cs.start_at <= now() + ($1 || ' hours')::interval
-          AND cs.start_at >  now() + ($1 || ' hours')::interval - interval '15 minutes'`,
-      [String(w.hours)]
+          AND cs.start_at >  now() + ($1 || ' hours')::interval - ($2 || ' minutes')::interval`,
+      [String(w.hours), w.key === '15m' ? '5' : '15']
     );
     for (const r of due.rows) {
       const when = new Date(r.start_at);

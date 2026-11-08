@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api_v0_13.dart';
+import 'push_v0_13.dart';
 
 /// Holds the logged-in user and token; persists token across launches.
 class AuthState extends ChangeNotifier {
@@ -8,6 +9,8 @@ class AuthState extends ChangeNotifier {
   Map<String, dynamic>? user;
 
   String? get role => user?['role'] as String?;
+  /// (v0.14) Shown in the navigation drawer header.
+  String? get email => user?['email'] as String?;
   bool get isLoggedIn => token != null;
 
   Future<void> loadFromStorage() async {
@@ -34,10 +37,14 @@ class AuthState extends ChangeNotifier {
     ApiClient.instance.setToken(token);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('token', token!);
+    // (v0.14 item 13) Deliver notifications to this device.
+    await PushService.instance.registerDevice();
     notifyListeners();
   }
 
   Future<void> logout() async {
+    // Stop OS notifications for this account on this device.
+    await PushService.instance.unregisterDevice();
     token = null;
     user = null;
     ApiClient.instance.setToken(null);

@@ -2,8 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../core/api_v0_13.dart';
 import '../core/i18n_v0_13.dart';
+import '../core/motion_v0_13.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:convert';
 import '../core/theme_v0_13.dart';
 import 'account_v0_13.dart';
+import 'contact_us_v0_13.dart';
 import '../core/motion_v0_13.dart';
 
 /// Settings hub (v0.8). `section` narrows the screen to one card when opened
@@ -18,15 +22,47 @@ class SettingsScreen extends StatelessWidget {
     final title = section == 'payment' ? 'Payment details'
         : section == 'bio' ? 'About me'
         : section == 'password' ? tr(context, 'Change password')
+        : section == 'photo' ? tr(context, 'Profile photo')
         : tr(context, 'Settings');
     final showAll = section == 'all';
     return Scaffold(
       appBar: AppBar(title: Text(title)),
       body: GlowBackground(
         child: ListView(padding: const EdgeInsets.all(16), children: [
-          if (showAll || section == 'password') const _LanguageCard(),
-          if (showAll || section == 'password') const _ChangePasswordCard(),
+          // (v0.14 item 12) Theme choice sits beside language.
+          if (showAll) const _LanguageCard(),
+          if (showAll) const _ThemeCard(),
+          // (v0.14 item 8) Change password is its own screen now: tapping the
+          // row opens it, rather than showing the fields inline on a list of
+          // unrelated settings.
+          if (showAll)
+            Card(
+              margin: const EdgeInsets.only(bottom: 12),
+              child: ListTile(
+                leading: const GradientIconBadge(icon: Icons.lock_outline, size: 32),
+                title: Text(tr(context, 'Change password')),
+                subtitle: Text(tr(context, 'Update the password you sign in with'),
+                    style: const TextStyle(fontSize: 12)),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.push(context,
+                    fadeSlideRoute(const SettingsScreen(section: 'password'))),
+              ),
+            ),
+          if (showAll)
+            Card(
+              margin: const EdgeInsets.only(bottom: 12),
+              child: ListTile(
+                leading: const GradientIconBadge(icon: Icons.support_agent, size: 32),
+                title: Text(tr(context, 'Contact us')),
+                subtitle: Text(tr(context, 'Email, phone and Instagram'),
+                    style: const TextStyle(fontSize: 12)),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.push(context, fadeSlideRoute(const ContactUsScreen())),
+              ),
+            ),
+          if (section == 'password') const _ChangePasswordCard(),
           if (section == 'bio') const _CoachAboutCard(),
+          if (section == 'photo') const _CoachPhotoCard(),
           if (section == 'payment') const _PaymentNoteCard(),
           // (v0.13) Store-required: legal documents and account deletion must
           // both be reachable from inside the app.
@@ -230,6 +266,139 @@ class _LanguageCard extends StatelessWidget {
               onSelectionChanged: (s) => lang.set(s.first),
             ),
           ),
+        ]),
+      ),
+    );
+  }
+}
+
+
+/// (v0.14 item 12) Light / dark / follow-system, saved on the device and
+/// mirrored to the account so it follows the user to a new phone.
+class _ThemeCard extends StatelessWidget {
+  const _ThemeCard();
+  @override
+  Widget build(BuildContext context) {
+    final theme = context.watch<AppTheme>();
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            const GradientIconBadge(icon: Icons.brightness_6, size: 32),
+            const SizedBox(width: 12),
+            Text(tr(context, 'Appearance'),
+                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+          ]),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: SegmentedButton<String>(
+              showSelectedIcon: false,
+              segments: [
+                ButtonSegment(
+                    value: 'system',
+                    icon: const Icon(Icons.phone_android, size: 16),
+                    label: Text(tr(context, 'System'))),
+                ButtonSegment(
+                    value: 'light',
+                    icon: const Icon(Icons.light_mode, size: 16),
+                    label: Text(tr(context, 'Light'))),
+                ButtonSegment(
+                    value: 'dark',
+                    icon: const Icon(Icons.dark_mode, size: 16),
+                    label: Text(tr(context, 'Dark'))),
+              ],
+              selected: {theme.mode},
+              onSelectionChanged: (s) => theme.set(s.first),
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+/// (v0.14 item 11) Coach profile photo — optional, replaceable any time.
+class _CoachPhotoCard extends StatefulWidget {
+  const _CoachPhotoCard();
+  @override
+  State<_CoachPhotoCard> createState() => _CoachPhotoCardState();
+}
+
+class _CoachPhotoCardState extends State<_CoachPhotoCard> {
+  bool busy = false;
+  String? message;
+
+  Future<void> _pick() async {
+    final picked = await ImagePicker().pickImage(
+        source: ImageSource.gallery, maxWidth: 1024, maxHeight: 1024, imageQuality: 85);
+    if (picked == null) return;
+    setState(() { busy = true; message = null; });
+    try {
+      final bytes = await picked.readAsBytes();
+      await ApiClient.instance.post('/api/profile/coach/photo', {
+        'mimeType': picked.name.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg',
+        'dataBase64': base64Encode(bytes),
+      });
+      setState(() => message = tr(context, 'Photo updated.'));
+    } on ApiException catch (e) {
+      setState(() => message = e.message);
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  Future<void> _remove() async {
+    setState(() { busy = true; message = null; });
+    try {
+      await ApiClient.instance.delete('/api/profile/coach/photo');
+      setState(() => message = tr(context, 'Photo removed.'));
+    } on ApiException catch (e) {
+      setState(() => message = e.message);
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            const GradientIconBadge(icon: Icons.photo_camera_outlined, size: 32),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(tr(context, 'Profile photo'),
+                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+            ),
+          ]),
+          const SizedBox(height: 8),
+          Text(tr(context, 'Members see this on your profile. It is optional.'),
+              style: const TextStyle(fontSize: 12, color: Color(0xFF9A9AA6))),
+          const SizedBox(height: 14),
+          Row(children: [
+            Expanded(
+              child: FilledButton.icon(
+                onPressed: busy ? null : _pick,
+                icon: const Icon(Icons.upload, size: 18),
+                label: Text(tr(context, 'Choose photo')),
+              ),
+            ),
+            const SizedBox(width: 10),
+            OutlinedButton(
+              onPressed: busy ? null : _remove,
+              child: Text(tr(context, 'Remove')),
+            ),
+          ]),
+          if (message != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: Text(message!, style: const TextStyle(fontSize: 12)),
+            ),
         ]),
       ),
     );

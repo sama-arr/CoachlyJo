@@ -3,6 +3,22 @@ const { pool } = require('../db/pool_v0_13');
 const { authenticate, requireRole } = require('../middleware/auth_v0_13');
 const schedule = require('../services/schedule.service_v0_13');
 
+// (v0.14 item 3) A coach can do nothing but complete their profile until an
+// admin approves them. Enforced here so it cannot be bypassed by the client.
+async function requireApprovedCoach(req, res, next) {
+  const r = await pool.query(
+    `SELECT status, rejection_reason FROM coach_profiles WHERE user_id = $1`, [req.user.id]);
+  if (r.rowCount === 0) return res.status(404).json({ error: 'Coach profile not found' });
+  const { status, rejection_reason: reason } = r.rows[0];
+  if (status === 'approved') return next();
+  return res.status(403).json({
+    error: status === 'rejected'
+      ? `Your application was not approved${reason ? `: ${reason}` : '.'}`
+      : 'Awaiting admin approval. You can set your availability once your account is approved.',
+    approvalStatus: status,
+  });
+}
+
 const router = express.Router();
 
 // Upload a verification document reference (spec §4.3).
@@ -24,31 +40,201 @@ router.post('/documents', authenticate, requireRole('coach'), async (req, res) =
 // automatically on a rolling 4-week horizon (see schedule.service.js).
 // =============================================================================
 
-// Full availability state for the Availability screen.
-router.get('/availability', authenticate, requireRole('coach'), async (req, res) => {
+// =============================================================================
+// (v0.14 item 16) Per-WEEK availability, laid out like a calendar.
+//
+// A coach opens a week, paints the hours they are available on each real date,
+// and the bookable sessions for that week are generated from those blocks.
+// "Copy last week" exists because most weeks repeat — it is one tap instead of
+// re-entering the whole grid.
+// =============================================================================
+
+// Monday-based week start for any date (the calendar grid runs Mon..Sun).
+function weekStart(dateStr) {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  const dow = d.getUTCDay();                 // 0=Sun..6=Sat
+  const diff = dow === 0 ? -6 : 1 - dow;     // shift back to Monday
+  d.setUTCDate(d.getUTCDate() + diff);
+  return d.toISOString().slice(0, 10);
+}
+
+function addDays(dateStr, n) {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+// GET /availability/week?start=YYYY-MM-DD  (any date inside the wanted week)
+router.get('/availability/week', authenticate, requireRole('coach'), requireApprovedCoach, requireApprovedCoach, async (req, res) => {
+  const today = new Date().toISOString().slice(0, 10);
+  const start = weekStart(req.query.start || today);
+  const end = addDays(start, 6);
+
   const settings = await pool.query(
     `INSERT INTO coach_schedule_settings (coach_id) VALUES ($1)
      ON CONFLICT (coach_id) DO UPDATE SET coach_id = EXCLUDED.coach_id
      RETURNING session_minutes`, [req.user.id]);
-  const days = await pool.query(
-    `SELECT dow, enabled FROM coach_day_settings WHERE coach_id=$1`, [req.user.id]);
-  const ranges = await pool.query(
-    `SELECT id, dow, start_time, end_time, delivery
-       FROM coach_availability_ranges WHERE coach_id=$1 ORDER BY dow, start_time`, [req.user.id]);
-  const enabledMap = new Map(days.rows.map((d) => [d.dow, d.enabled]));
+
+  const blocks = await pool.query(
+    `SELECT id, on_date::text AS on_date, start_time, end_time, delivery
+       FROM coach_availability_days
+      WHERE coach_id=$1 AND on_date BETWEEN $2::date AND $3::date
+      ORDER BY on_date, start_time`,
+    [req.user.id, start, end]);
+
+  // Sessions already generated for this week, so the grid can show which
+  // blocks are booked and must not be removed.
+  const sessions = await pool.query(
+    `SELECT cs.id, cs.start_at, cs.end_at, cs.delivery, cs.generated_from_day,
+            (SELECT COUNT(*)::int FROM bookings b
+              WHERE b.session_id=cs.id AND b.status IN ('pending','accepted','completed')) AS booked
+       FROM coach_sessions cs
+      WHERE cs.coach_id=$1
+        AND cs.start_at >= $2::date
+        AND cs.start_at <  ($3::date + interval '1 day')
+      ORDER BY cs.start_at`,
+    [req.user.id, start, end]);
+
   res.json({
+    weekStart: start,
+    weekEnd: end,
     sessionMinutes: settings.rows[0].session_minutes,
-    days: [0, 1, 2, 3, 4, 5, 6].map((dow) => ({
-      dow,
-      enabled: enabledMap.get(dow) === true,
-      ranges: ranges.rows.filter((r) => r.dow === dow),
-    })),
+    days: [0, 1, 2, 3, 4, 5, 6].map((i) => {
+      const date = addDays(start, i);
+      return {
+        date,
+        isPast: date < today,
+        blocks: blocks.rows.filter((b) => b.on_date === date),
+      };
+    }),
+    sessions: sessions.rows,
   });
 });
 
-// Change the per-coach session duration (30/45/50/60/90, default 50).
-// Future unbooked generated sessions are rebuilt on the new grid.
-router.put('/availability/settings', authenticate, requireRole('coach'), async (req, res) => {
+// Add one block of hours on one date.
+router.post('/availability/day', authenticate, requireRole('coach'), requireApprovedCoach, async (req, res) => {
+  const { date, startTime, endTime, delivery } = req.body || {};
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date || ''))
+    return res.status(400).json({ error: 'date must be YYYY-MM-DD' });
+  if (!/^\d{2}:\d{2}$/.test(startTime || '') || !/^\d{2}:\d{2}$/.test(endTime || ''))
+    return res.status(400).json({ error: 'startTime and endTime must be HH:MM' });
+  if (endTime <= startTime)
+    return res.status(400).json({ error: 'End time must be after the start time' });
+  if (!['online', 'in_person'].includes(delivery || 'online'))
+    return res.status(400).json({ error: 'delivery must be online or in_person' });
+  if (date < new Date().toISOString().slice(0, 10))
+    return res.status(400).json({ error: 'That date has already passed' });
+
+  const overlap = await pool.query(
+    `SELECT 1 FROM coach_availability_days
+      WHERE coach_id=$1 AND on_date=$2::date
+        AND start_time < $4::time AND end_time > $3::time LIMIT 1`,
+    [req.user.id, date, startTime, endTime]);
+  if (overlap.rowCount > 0)
+    return res.status(409).json({ error: 'These hours overlap hours you already set for that day' });
+
+  const ins = await pool.query(
+    `INSERT INTO coach_availability_days (coach_id, on_date, start_time, end_time, delivery)
+     VALUES ($1,$2::date,$3,$4,$5) RETURNING id, on_date::text AS on_date, start_time, end_time, delivery`,
+    [req.user.id, date, startTime, endTime, delivery || 'online']);
+  const gen = await schedule.regenerateForCoach(req.user.id);
+  res.status(201).json({ block: ins.rows[0], generated: gen.generated });
+});
+
+// Edit one block (drag its edges in the calendar, or flip online/in-person).
+router.put('/availability/day/:id', authenticate, requireRole('coach'), requireApprovedCoach, async (req, res) => {
+  const cur = await pool.query(
+    `SELECT * FROM coach_availability_days WHERE id=$1 AND coach_id=$2`,
+    [req.params.id, req.user.id]);
+  if (cur.rowCount === 0) return res.status(404).json({ error: 'Those hours were not found' });
+  const b = cur.rows[0];
+  const startTime = req.body?.startTime ?? String(b.start_time).slice(0, 5);
+  const endTime = req.body?.endTime ?? String(b.end_time).slice(0, 5);
+  const delivery = req.body?.delivery ?? b.delivery;
+  if (endTime <= startTime)
+    return res.status(400).json({ error: 'End time must be after the start time' });
+
+  const overlap = await pool.query(
+    `SELECT 1 FROM coach_availability_days
+      WHERE coach_id=$1 AND on_date=$2 AND id<>$5
+        AND start_time < $4::time AND end_time > $3::time LIMIT 1`,
+    [req.user.id, b.on_date, startTime, endTime, b.id]);
+  if (overlap.rowCount > 0)
+    return res.status(409).json({ error: 'These hours overlap hours you already set for that day' });
+
+  const upd = await pool.query(
+    `UPDATE coach_availability_days SET start_time=$3, end_time=$4, delivery=$5
+      WHERE id=$1 AND coach_id=$2
+      RETURNING id, on_date::text AS on_date, start_time, end_time, delivery`,
+    [b.id, req.user.id, startTime, endTime, delivery]);
+  const cleanup = await schedule.cleanupDays(req.user.id, [b.id]);
+  const gen = await schedule.regenerateForCoach(req.user.id);
+  res.json({ block: upd.rows[0], ...cleanup, generated: gen.generated });
+});
+
+router.delete('/availability/day/:id', authenticate, requireRole('coach'), requireApprovedCoach, async (req, res) => {
+  const cur = await pool.query(
+    `SELECT id FROM coach_availability_days WHERE id=$1 AND coach_id=$2`,
+    [req.params.id, req.user.id]);
+  if (cur.rowCount === 0) return res.status(404).json({ error: 'Those hours were not found' });
+  const cleanup = await schedule.cleanupDays(req.user.id, [req.params.id]);
+  await pool.query(`DELETE FROM coach_availability_days WHERE id=$1`, [req.params.id]);
+  res.json({ deleted: req.params.id, ...cleanup });
+});
+
+// Copy the previous week's hours into the target week — most weeks repeat.
+router.post('/availability/copy-week', authenticate, requireRole('coach'), requireApprovedCoach, async (req, res) => {
+  const target = weekStart(req.body?.targetWeek || new Date().toISOString().slice(0, 10));
+  const source = addDays(target, -7);
+  const today = new Date().toISOString().slice(0, 10);
+
+  const src = await pool.query(
+    `SELECT on_date::text AS on_date, start_time, end_time, delivery
+       FROM coach_availability_days
+      WHERE coach_id=$1 AND on_date BETWEEN $2::date AND $3::date
+      ORDER BY on_date, start_time`,
+    [req.user.id, source, addDays(source, 6)]);
+  if (src.rowCount === 0)
+    return res.status(409).json({ error: 'There are no hours in the previous week to copy' });
+
+  let copied = 0, skipped = 0;
+  for (const b of src.rows) {
+    const newDate = addDays(b.on_date, 7);
+    if (newDate < today) { skipped++; continue; }
+    const clash = await pool.query(
+      `SELECT 1 FROM coach_availability_days
+        WHERE coach_id=$1 AND on_date=$2::date
+          AND start_time < $4::time AND end_time > $3::time LIMIT 1`,
+      [req.user.id, newDate, String(b.start_time).slice(0, 5), String(b.end_time).slice(0, 5)]);
+    if (clash.rowCount > 0) { skipped++; continue; }
+    await pool.query(
+      `INSERT INTO coach_availability_days (coach_id, on_date, start_time, end_time, delivery)
+       VALUES ($1,$2::date,$3,$4,$5)`,
+      [req.user.id, newDate, b.start_time, b.end_time, b.delivery]);
+    copied++;
+  }
+  const gen = await schedule.regenerateForCoach(req.user.id);
+  res.json({ copied, skipped, generated: gen.generated, weekStart: target });
+});
+
+// Clear every (unbooked) hour in a week — "I am away next week".
+router.delete('/availability/week', authenticate, requireRole('coach'), requireApprovedCoach, requireApprovedCoach, async (req, res) => {
+  const start = weekStart(req.query.start || new Date().toISOString().slice(0, 10));
+  const ids = await pool.query(
+    `SELECT id FROM coach_availability_days
+      WHERE coach_id=$1 AND on_date BETWEEN $2::date AND $3::date`,
+    [req.user.id, start, addDays(start, 6)]);
+  const list = ids.rows.map((r) => r.id);
+  const cleanup = await schedule.cleanupDays(req.user.id, list);
+  if (list.length > 0) {
+    await pool.query(`DELETE FROM coach_availability_days WHERE id = ANY($1::uuid[])`, [list]);
+  }
+  res.json({ cleared: list.length, ...cleanup });
+});
+
+// Session duration for generated sessions (30/45/50/60/90, default 50).
+// Changing it rebuilds future UNBOOKED sessions on the new grid.
+router.put('/availability/settings', authenticate, requireRole('coach'), requireApprovedCoach, async (req, res) => {
   const { sessionMinutes } = req.body || {};
   if (![30, 45, 50, 60, 90].includes(sessionMinutes))
     return res.status(400).json({ error: 'sessionMinutes must be one of 30, 45, 50, 60, 90' });
@@ -57,108 +243,12 @@ router.put('/availability/settings', authenticate, requireRole('coach'), async (
      VALUES ($1, $2)
      ON CONFLICT (coach_id) DO UPDATE SET session_minutes=$2, updated_at=now()`,
     [req.user.id, sessionMinutes]);
-  const ids = await schedule.rangeIdsFor(req.user.id);
-  const cleanup = await schedule.cleanupRanges(req.user.id, ids);
+  const ids = await pool.query(
+    `SELECT id FROM coach_availability_days WHERE coach_id=$1 AND on_date >= CURRENT_DATE`, [req.user.id]);
+  const cleanup = await schedule.cleanupDays(req.user.id, ids.rows.map((r) => r.id));
   const gen = await schedule.regenerateForCoach(req.user.id);
   res.json({ sessionMinutes, ...cleanup, generated: gen.generated });
 });
-
-// Toggle a weekday on/off. Turning OFF removes future unbooked sessions of
-// that day (booked ones are kept and reported); turning ON regenerates.
-router.put('/availability/days/:dow', authenticate, requireRole('coach'), async (req, res) => {
-  const dow = parseInt(req.params.dow, 10);
-  const { enabled } = req.body || {};
-  if (!(dow >= 0 && dow <= 6)) return res.status(400).json({ error: 'dow must be 0..6' });
-  if (typeof enabled !== 'boolean') return res.status(400).json({ error: 'enabled (boolean) required' });
-  await pool.query(
-    `INSERT INTO coach_day_settings (coach_id, dow, enabled) VALUES ($1,$2,$3)
-     ON CONFLICT (coach_id, dow) DO UPDATE SET enabled=$3`,
-    [req.user.id, dow, enabled]);
-  let result = { removed: 0, keptBooked: 0, generated: 0 };
-  if (enabled) {
-    const gen = await schedule.regenerateForCoach(req.user.id);
-    result.generated = gen.generated;
-  } else {
-    const ids = await schedule.rangeIdsFor(req.user.id, dow);
-    const cleanup = await schedule.cleanupRanges(req.user.id, ids);
-    result = { ...result, ...cleanup };
-  }
-  res.json({ dow, enabled, ...result });
-});
-
-// Add a time range to a day ("Add more"). Rejects overlaps within the day.
-router.post('/availability/ranges', authenticate, requireRole('coach'), async (req, res) => {
-  const { dow, startTime, endTime, delivery } = req.body || {};
-  const d = parseInt(dow, 10);
-  if (!(d >= 0 && d <= 6)) return res.status(400).json({ error: 'dow must be 0..6' });
-  if (!/^\d{2}:\d{2}$/.test(startTime || '') || !/^\d{2}:\d{2}$/.test(endTime || ''))
-    return res.status(400).json({ error: 'startTime and endTime must be HH:MM' });
-  if (endTime <= startTime) return res.status(400).json({ error: 'endTime must be after startTime' });
-  if (!['online', 'in_person'].includes(delivery || 'online'))
-    return res.status(400).json({ error: 'delivery must be online or in_person' });
-
-  const overlap = await pool.query(
-    `SELECT 1 FROM coach_availability_ranges
-      WHERE coach_id=$1 AND dow=$2 AND start_time < $4::time AND end_time > $3::time LIMIT 1`,
-    [req.user.id, d, startTime, endTime]);
-  if (overlap.rowCount > 0)
-    return res.status(409).json({ error: 'This range overlaps an existing range on that day' });
-
-  const ins = await pool.query(
-    `INSERT INTO coach_availability_ranges (coach_id, dow, start_time, end_time, delivery)
-     VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-    [req.user.id, d, startTime, endTime, delivery || 'online']);
-  // Make sure the day exists as enabled the first time a range is added.
-  await pool.query(
-    `INSERT INTO coach_day_settings (coach_id, dow, enabled) VALUES ($1,$2,TRUE)
-     ON CONFLICT (coach_id, dow) DO NOTHING`, [req.user.id, d]);
-  const gen = await schedule.regenerateForCoach(req.user.id);
-  res.status(201).json({ range: ins.rows[0], generated: gen.generated });
-});
-
-// Edit a range (tap a time pill / flip delivery). Rebuilds that range's
-// future unbooked sessions on the new times.
-router.put('/availability/ranges/:id', authenticate, requireRole('coach'), async (req, res) => {
-  const cur = await pool.query(
-    `SELECT * FROM coach_availability_ranges WHERE id=$1 AND coach_id=$2`,
-    [req.params.id, req.user.id]);
-  if (cur.rowCount === 0) return res.status(404).json({ error: 'Range not found' });
-  const r = cur.rows[0];
-  const startTime = req.body?.startTime ?? String(r.start_time).slice(0, 5);
-  const endTime = req.body?.endTime ?? String(r.end_time).slice(0, 5);
-  const delivery = req.body?.delivery ?? r.delivery;
-  if (!/^\d{2}:\d{2}$/.test(startTime) || !/^\d{2}:\d{2}$/.test(endTime))
-    return res.status(400).json({ error: 'startTime and endTime must be HH:MM' });
-  if (endTime <= startTime) return res.status(400).json({ error: 'endTime must be after startTime' });
-  if (!['online', 'in_person'].includes(delivery))
-    return res.status(400).json({ error: 'delivery must be online or in_person' });
-  const overlap = await pool.query(
-    `SELECT 1 FROM coach_availability_ranges
-      WHERE coach_id=$1 AND dow=$2 AND id<>$5 AND start_time < $4::time AND end_time > $3::time LIMIT 1`,
-    [req.user.id, r.dow, startTime, endTime, r.id]);
-  if (overlap.rowCount > 0)
-    return res.status(409).json({ error: 'This range overlaps an existing range on that day' });
-
-  const upd = await pool.query(
-    `UPDATE coach_availability_ranges SET start_time=$3, end_time=$4, delivery=$5
-      WHERE id=$1 AND coach_id=$2 RETURNING *`,
-    [r.id, req.user.id, startTime, endTime, delivery]);
-  const cleanup = await schedule.cleanupRanges(req.user.id, [r.id]);
-  const gen = await schedule.regenerateForCoach(req.user.id);
-  res.json({ range: upd.rows[0], ...cleanup, generated: gen.generated });
-});
-
-// Delete a range. Future unbooked sessions from it are removed; booked kept.
-router.delete('/availability/ranges/:id', authenticate, requireRole('coach'), async (req, res) => {
-  const cur = await pool.query(
-    `SELECT id FROM coach_availability_ranges WHERE id=$1 AND coach_id=$2`,
-    [req.params.id, req.user.id]);
-  if (cur.rowCount === 0) return res.status(404).json({ error: 'Range not found' });
-  const cleanup = await schedule.cleanupRanges(req.user.id, [req.params.id]);
-  await pool.query(`DELETE FROM coach_availability_ranges WHERE id=$1`, [req.params.id]);
-  res.json({ deleted: req.params.id, ...cleanup });
-});
-
 
 // (v0.9 item 2) Member profile + fitness questionnaire for the coach.
 // PRIVACY GATE (confirmed with the client): a coach may only open a member who
@@ -177,7 +267,7 @@ router.get('/members/:memberId', authenticate, requireRole('coach'), async (req,
 
   const profile = await pool.query(
     `SELECT m.user_id, m.first_name, m.last_name, m.location, m.date_of_birth,
-            m.birth_place, m.nationality, u.phone, u.email
+            m.nationality, u.phone, u.email
        FROM member_profiles m JOIN users u ON u.id=m.user_id
       WHERE m.user_id=$1`, [req.params.memberId]);
   if (profile.rowCount === 0) return res.status(404).json({ error: 'Member not found' });
@@ -219,7 +309,7 @@ router.get('/members/:memberId', authenticate, requireRole('coach'), async (req,
 });
 
 // Coach views their own sessions + booking counts.
-router.get('/my-sessions', authenticate, requireRole('coach'), async (req, res) => {
+router.get('/my-sessions', authenticate, requireRole('coach'), requireApprovedCoach, async (req, res) => {
   // (v0.6 item 3) ?scope=open — only future slots with no pending/accepted/
   // completed booking. The Sessions tab shows these ("my open bookable
   // times"); actual appointments live in the Requests tab. No scope = all
@@ -240,7 +330,7 @@ router.get('/my-sessions', authenticate, requireRole('coach'), async (req, res) 
 
 // Coach views bookings to act on. Once accepted, the coach also sees the member's
 // phone + location (item 12) and the Zoom link for online sessions (item 3).
-router.get('/bookings', authenticate, requireRole('coach'), async (req, res) => {
+router.get('/bookings', authenticate, requireRole('coach'), requireApprovedCoach, async (req, res) => {
   const r = await pool.query(
     `SELECT b.id, b.status, b.is_trial, b.rejection_reason, b.completion_kind,
             b.member_package_id,
@@ -289,7 +379,7 @@ router.delete('/availability/:id', authenticate, requireRole('coach'), async (re
 // coach and had it activated. Split into 'active' and 'completed' (item 4):
 // completed = all classes consumed, or the package expired. Contact details are
 // visible — a subscriber has paid and been activated (confirmed in v0.4 scope).
-router.get('/clients', authenticate, requireRole('coach'), async (req, res) => {
+router.get('/clients', authenticate, requireRole('coach'), requireApprovedCoach, async (req, res) => {
   const r = await pool.query(
     `SELECT mp.id AS package_id, mp.status, mp.is_single, mp.mode,
             mp.classes_total, mp.classes_consumed, mp.classes_pending,
@@ -321,7 +411,7 @@ router.get('/clients', authenticate, requireRole('coach'), async (req, res) => {
 
 // (v0.4 item 9) Coach performance dashboard — activity only, no revenue
 // (confirmed in v0.4 scope). ?days=7|30|90 window for the trend + range stats.
-router.get('/dashboard', authenticate, requireRole('coach'), async (req, res) => {
+router.get('/dashboard', authenticate, requireRole('coach'), requireApprovedCoach, async (req, res) => {
   // (v0.10) Sessions owed from same-day cancellations, for the coach to see.
   const pen = await pool.query(
     `SELECT COALESCE(SUM(sessions), 0)::int AS n FROM coach_penalties
@@ -329,7 +419,14 @@ router.get('/dashboard', authenticate, requireRole('coach'), async (req, res) =>
   const days = [7, 30, 90].includes(parseInt(req.query.days, 10)) ? parseInt(req.query.days, 10) : 30;
   const id = req.user.id;
   const [upcoming, pendingReq, range, clients, rating, weekly] = await Promise.all([
-    pool.query(`SELECT COUNT(*)::int n FROM coach_sessions WHERE coach_id=$1 AND start_at > now()`, [id]),
+    // (v0.14 item 17) "Upcoming sessions" means BOOKED appointments, not open
+    // slots — a coach with a full week of availability and no clients was
+    // seeing a large, meaningless number here.
+    pool.query(
+      `SELECT COUNT(*)::int n
+         FROM bookings b JOIN coach_sessions cs ON cs.id = b.session_id
+        WHERE cs.coach_id = $1 AND cs.start_at > now()
+          AND b.status IN ('pending','accepted')`, [id]),
     pool.query(
       `SELECT COUNT(*)::int n FROM bookings b JOIN coach_sessions cs ON cs.id=b.session_id
         WHERE cs.coach_id=$1 AND b.status='pending'`, [id]),
@@ -359,7 +456,8 @@ router.get('/dashboard', authenticate, requireRole('coach'), async (req, res) =>
   const decided = r.completed + r.cancelled + r.rejected;
   res.json({
     days,
-    upcomingSessions: upcoming.rows[0].n,
+    upcomingSessions: upcoming.rows[0].n,   // booked only, as of v0.14
+    upcomingBooked: upcoming.rows[0].n,
     pendingRequests: pendingReq.rows[0].n,
     completed: r.completed,
     cancelled: r.cancelled,

@@ -1015,4 +1015,22 @@ router.delete('/users/:id', async (req, res) => {
   }
 });
 
+// (v0.14 item 6) Contact details shown on the Contact Us screen.
+router.put('/contact', async (req, res) => {
+  const { email, phone, instagram, whatsapp } = req.body || {};
+  if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))
+    return res.status(400).json({ error: 'Please enter a valid email address' });
+  const r = await pool.query(
+    `UPDATE platform_settings
+        SET contact_email = COALESCE($1, contact_email),
+            contact_phone = COALESCE($2, contact_phone),
+            contact_instagram = COALESCE($3, contact_instagram),
+            contact_whatsapp = COALESCE($4, contact_whatsapp),
+            updated_at = now()
+      WHERE id = 1
+      RETURNING contact_email, contact_phone, contact_instagram, contact_whatsapp`,
+    [email ?? null, phone ?? null, instagram ?? null, whatsapp ?? null]);
+  res.json(r.rows[0]);
+});
+
 module.exports = router;

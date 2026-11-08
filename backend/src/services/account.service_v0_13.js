@@ -107,7 +107,7 @@ async function deleteAccount(userId, requestedBy = 'user', reason = null) {
       await client.query(
         `UPDATE member_profiles
             SET first_name='Deleted', last_name='user', location=NULL,
-                date_of_birth=NULL, birth_place=NULL, nationality=NULL
+                date_of_birth=NULL, nationality=NULL
           WHERE user_id = $1`,
         [userId]
       );
@@ -127,7 +127,7 @@ async function deleteAccount(userId, requestedBy = 'user', reason = null) {
       await client.query(
         `UPDATE coach_profiles
             SET first_name='Deleted', last_name='coach', bio_en=NULL, bio_ar=NULL,
-                date_of_birth=NULL, nationality=NULL, birth_place=NULL, status='rejected',
+                date_of_birth=NULL, nationality=NULL, status='rejected',
                 rejection_reason='Account deleted by the coach'
           WHERE user_id = $1`,
         [userId]

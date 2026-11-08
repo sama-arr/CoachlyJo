@@ -4,6 +4,19 @@ const { authenticate, requireRole } = require('../middleware/auth_v0_13');
 const svc = require('../services/booking.service_v0_13');
 const { generateZoomLink } = require('../services/zoom.service_v0_13');
 const { notify, notifyAdmins } = require('../services/notification.service_v0_13');
+const { profileStatus } = require('./profile_v0_13');
+
+// (v0.14 item 2) Booking also requires a completed profile — the coach needs
+// the questionnaire answers to run the session safely.
+async function requireCompleteProfile(req, res, next) {
+  const st = await profileStatus(req.user.id, 'member');
+  if (st.complete) return next();
+  return res.status(403).json({
+    error: 'Please complete your profile first.',
+    profileIncomplete: true,
+    missing: st.missing,
+  });
+}
 
 const router = express.Router();
 
@@ -14,7 +27,7 @@ function handle(res, err) {
 }
 
 // Member books a session against an active package (v0.2 — no free trial) — spec §6.
-router.post('/', authenticate, requireRole('member'), async (req, res) => {
+router.post('/', authenticate, requireRole('member'), requireCompleteProfile, async (req, res) => {
   const { sessionId } = req.body || {};
   if (!sessionId) return res.status(400).json({ error: 'sessionId required' });
   try {
@@ -57,6 +70,7 @@ router.post(
   requireRole('coach'),
   async (req, res) => {
     const { accept, rejectionReason } = req.body || {};
+    let zoomPending = false;
 
     try {
       if (accept) {
@@ -102,30 +116,46 @@ router.post(
               )
             );
 
-            const link = await generateZoomLink(
-              row.session_id,
-              {
-                topic:
-                  `CoachlyJo session with ` +
-                  `${row.coach_first} ${row.coach_last}`,
-                startAt: row.start_at,
-                durationMinutes,
-              }
-            );
-
-            await pool.query(
-              `UPDATE coach_sessions
-                  SET zoom_meeting_id=$2,
-                      zoom_join_url=$3,
-                      zoom_start_url=$4
-                WHERE id=$1`,
-              [
+            // (v0.14) Zoom failure must NOT block the booking.
+            //
+            // Creating the meeting first is right — we never show a fake link.
+            // But throwing here meant a coach could not accept ANY online
+            // session whenever Zoom was unconfigured or briefly down, which
+            // stopped the core flow dead. Instead we accept the booking and
+            // leave the link empty: the app shows "meeting link pending" and
+            // the coach can add their own link, while this stays logged.
+            try {
+              const link = await generateZoomLink(
                 row.session_id,
-                link.meetingId,
-                link.joinUrl,
-                link.startUrl,
-              ]
-            );
+                {
+                  topic:
+                    `CoachlyJo session with ` +
+                    `${row.coach_first} ${row.coach_last}`,
+                  startAt: row.start_at,
+                  durationMinutes,
+                }
+              );
+
+              await pool.query(
+                `UPDATE coach_sessions
+                    SET zoom_meeting_id=$2,
+                        zoom_join_url=$3,
+                        zoom_start_url=$4
+                  WHERE id=$1`,
+                [
+                  row.session_id,
+                  link.meetingId,
+                  link.joinUrl,
+                  link.startUrl,
+                ]
+              );
+            } catch (zoomErr) {
+              console.error(
+                `[ZOOM] Could not create a meeting for session ${row.session_id}: ` +
+                `${zoomErr.message} — accepting the booking without a link.`
+              );
+              zoomPending = true;
+            }
           }
         }
       }
@@ -173,12 +203,41 @@ router.post(
         email: true,
       });
 
-      res.json(b);
+      res.json({ ...b, zoomPending });
     } catch (err) {
       handle(res, err);
     }
   }
 );
+
+// (v0.14) Coach supplies their own meeting link when automatic creation failed,
+// or wants to use Google Meet / their personal Zoom room instead.
+router.put('/:id/meeting-link', authenticate, requireRole('coach'), async (req, res) => {
+  const { joinUrl } = req.body || {};
+  if (!joinUrl || !/^https?:\/\/[^\s]+$/i.test(joinUrl))
+    return res.status(400).json({ error: 'Please paste a valid meeting link' });
+
+  const r = await pool.query(
+    `UPDATE coach_sessions cs
+        SET zoom_join_url = $3, zoom_start_url = $3
+       FROM bookings b
+      WHERE b.id = $1 AND b.session_id = cs.id AND cs.coach_id = $2
+      RETURNING cs.id, b.member_id`,
+    [req.params.id, req.user.id, joinUrl.trim()]);
+  if (r.rowCount === 0) return res.status(404).json({ error: 'Booking not found' });
+
+  await notify({
+    userId: r.rows[0].member_id,
+    type: 'zoom_link',
+    titleEn: 'Your session link is ready',
+    titleAr: 'رابط جلستك جاهز',
+    bodyEn: 'Your coach added the meeting link for your upcoming session.',
+    bodyAr: 'أضاف مدربك رابط الاجتماع لجلستك القادمة.',
+    relatedId: req.params.id,
+    email: true,
+  });
+  res.json({ updated: true });
+});
 // Coach marks completed -> deduct a class (spec §6.6, §7.3).
 router.post('/:id/complete', authenticate, requireRole('coach'), async (req, res) => {
   try {

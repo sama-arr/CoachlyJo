@@ -21,7 +21,7 @@
 // =============================================================================
 const { pool } = require('../db/pool_v0_13');
 
-const HORIZON_DAYS = 28;
+const HORIZON_DAYS = 56;   // (v0.14) coaches plan up to 8 weeks ahead
 
 async function platformTz() {
   const r = await pool.query(`SELECT timezone FROM platform_settings WHERE id=1`);
@@ -50,6 +50,9 @@ function toHHMM(mins) {
 }
 
 /** (Re)generate the coach's sessions over the horizon. No-op unless approved. */
+// (v0.14 item 16) Sessions are generated from DATED availability blocks, which
+// coaches paint week by week in the calendar. The old recurring tables are kept
+// read-only for history; nothing new is generated from them.
 async function regenerateForCoach(coachId) {
   const status = await pool.query(`SELECT status FROM coach_profiles WHERE user_id=$1`, [coachId]);
   if (status.rowCount === 0 || status.rows[0].status !== 'approved') return { generated: 0 };
@@ -61,55 +64,70 @@ async function regenerateForCoach(coachId) {
      RETURNING session_minutes`, [coachId]);
   const minutes = settings.rows[0].session_minutes;
 
-  const ranges = await pool.query(
-    `SELECT r.id, r.dow, r.start_time, r.end_time, r.delivery
-       FROM coach_availability_ranges r
-       JOIN coach_day_settings d ON d.coach_id=r.coach_id AND d.dow=r.dow AND d.enabled=TRUE
-      WHERE r.coach_id=$1`, [coachId]);
-  if (ranges.rowCount === 0) {
-    await pool.query(`UPDATE coach_schedule_settings SET last_generated_at=now() WHERE coach_id=$1`, [coachId]);
-    return { generated: 0 };
-  }
-
-  const byDow = new Map();
-  for (const r of ranges.rows) {
-    if (!byDow.has(r.dow)) byDow.set(r.dow, []);
-    byDow.get(r.dow).push(r);
-  }
+  // Only today onwards, and only inside the rolling horizon: a coach can set
+  // hours further ahead, and those materialise as the horizon reaches them.
+  const blocks = await pool.query(
+    `SELECT id, on_date, start_time, end_time, delivery
+       FROM coach_availability_days
+      WHERE coach_id = $1
+        AND on_date >= (now() AT TIME ZONE $2)::date
+        AND on_date <= ((now() AT TIME ZONE $2)::date + ($3 || ' days')::interval)
+      ORDER BY on_date, start_time`,
+    [coachId, tz, String(HORIZON_DAYS)]);
 
   let generated = 0;
-  for (let i = 0; i <= HORIZON_DAYS; i++) {
-    const { date, dow } = localDateInfo(i, tz);
-    const todays = byDow.get(dow);
-    if (!todays) continue;
-    for (const r of todays) {
-      const startM = toMinutes(r.start_time);
-      const endM = toMinutes(r.end_time);
-      for (let m = startM; m + minutes <= endM; m += minutes) {
-        const localStart = `${date} ${toHHMM(m)}:00`;
-        const ins = await pool.query(
-          `INSERT INTO coach_sessions
-             (coach_id, template_id, session_date, start_at, end_at, capacity, delivery, generated_from_range)
-           SELECT $1, NULL, $2::date, ($3::timestamp AT TIME ZONE $4),
-                  ($3::timestamp AT TIME ZONE $4) + ($5 || ' minutes')::interval,
-                  1, $6, $7
-            WHERE ($3::timestamp AT TIME ZONE $4) > now()
-           ON CONFLICT (coach_id, start_at) DO NOTHING
-           RETURNING id`,
-          [coachId, date, localStart, tz, String(minutes), r.delivery, r.id]
-        );
-        generated += ins.rowCount;
-      }
+  for (const b of blocks.rows) {
+    const date = b.on_date instanceof Date
+      ? b.on_date.toISOString().slice(0, 10)
+      : String(b.on_date).slice(0, 10);
+    const startM = toMinutes(b.start_time);
+    const endM = toMinutes(b.end_time);
+
+    for (let m = startM; m + minutes <= endM; m += minutes) {
+      const localStart = `${date} ${toHHMM(m)}:00`;
+      const ins = await pool.query(
+        `INSERT INTO coach_sessions
+           (coach_id, template_id, session_date, start_at, end_at, capacity, delivery, generated_from_day)
+         SELECT $1, NULL, $2::date, ($3::timestamp AT TIME ZONE $4),
+                ($3::timestamp AT TIME ZONE $4) + ($5 || ' minutes')::interval,
+                1, $6, $7
+          WHERE ($3::timestamp AT TIME ZONE $4) > now()
+         ON CONFLICT (coach_id, start_at) DO NOTHING
+         RETURNING id`,
+        [coachId, date, localStart, tz, String(minutes), b.delivery, b.id]
+      );
+      generated += ins.rowCount;
     }
   }
+
   await pool.query(`UPDATE coach_schedule_settings SET last_generated_at=now() WHERE coach_id=$1`, [coachId]);
   return { generated };
 }
 
 /**
- * Remove FUTURE, UNBOOKED sessions generated from the given range ids.
- * Returns { removed, keptBooked } so the UI can inform the coach.
+ * Remove future UNBOOKED sessions generated from the given dated blocks.
+ * Booked sessions are always kept and reported, exactly as before.
  */
+async function cleanupDays(coachId, dayIds) {
+  if (!dayIds.length) return { removed: 0, keptBooked: 0 };
+  const kept = await pool.query(
+    `SELECT COUNT(*)::int n FROM coach_sessions cs
+      WHERE cs.coach_id=$1 AND cs.generated_from_day = ANY($2::uuid[])
+        AND cs.start_at > now()
+        AND EXISTS (SELECT 1 FROM bookings b WHERE b.session_id=cs.id
+                     AND b.status IN ('pending','accepted','completed'))`,
+    [coachId, dayIds]);
+  const del = await pool.query(
+    `DELETE FROM coach_sessions cs
+      WHERE cs.coach_id=$1 AND cs.generated_from_day = ANY($2::uuid[])
+        AND cs.start_at > now()
+        AND NOT EXISTS (SELECT 1 FROM bookings b WHERE b.session_id=cs.id
+                         AND b.status IN ('pending','accepted','completed'))
+      RETURNING cs.id`,
+    [coachId, dayIds]);
+  return { removed: del.rowCount, keptBooked: kept.rows[0].n };
+}
+
 async function cleanupRanges(coachId, rangeIds) {
   if (!rangeIds.length) return { removed: 0, keptBooked: 0 };
   const kept = await pool.query(
@@ -153,4 +171,5 @@ async function regenerateAllApproved() {
   return total;
 }
 
-module.exports = { regenerateForCoach, regenerateAllApproved, cleanupRanges, rangeIdsFor, HORIZON_DAYS };
+module.exports = {
+  regenerateForCoach, regenerateAllApproved, cleanupRanges, cleanupDays, rangeIdsFor, HORIZON_DAYS };

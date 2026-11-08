@@ -11,6 +11,7 @@ import '../core/error_retry_v0_13.dart';
 import '../core/theme_v0_13.dart';
 import 'admin_packages_v0_13.dart';
 import 'admin_content_v0_13.dart';
+import 'app_drawer_v0_13.dart';
 import 'notifications_v0_13.dart';
 import '../core/motion_v0_13.dart';
 import '../core/simple_charts_v0_13.dart';
@@ -29,31 +30,15 @@ class _AdminHomeState extends State<AdminHome> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Admin'),
-        actions: [
-          const NotificationBell(),
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.settings),
-            onSelected: (v) {
-              if (v == 'password') {
-                Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
-              } else if (v == 'payment') {
-                Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen(section: 'payment')));
-              } else if (v == 'signout') {
-                context.read<AuthState>().logout();
-              }
-            },
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'password', child: Text('Change password')),
-              PopupMenuItem(value: 'payment', child: Text('Change payment details')),
-              PopupMenuItem(value: 'signout', child: Text('Sign out')),
-            ],
-          ),
-        ],
+        actions: const [NotificationBell()],
       ),
+      drawer: const AppDrawer(role: 'admin'),
       body: GlowBackground(child: [const _PendingCoaches(), const _PendingPackages(), const AdminPackagesScreenBody(), const _Reports(), const _People(), const _Structure()][_tab]),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _tab,
         onDestinationSelected: (i) => setState(() => _tab = i),
+        // (v0.14 item 15) Six tabs only fit if just the selected one is labelled.
+        labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
         destinations: const [
           NavigationDestination(icon: Icon(Icons.verified_user), label: 'Approvals'),
           NavigationDestination(icon: Icon(Icons.payments), label: 'Payments'),
@@ -539,6 +524,14 @@ class _StructureState extends State<_Structure> {
           trailing: const Icon(Icons.chevron_right),
           onTap: () => Navigator.push(context, fadeSlideRoute(const AdminContentScreen())),
         )),
+        // (v0.14 item 6) Contact details shown on the app's Contact Us screen.
+        Card(child: ListTile(
+          leading: const GradientIconBadge(icon: Icons.support_agent, size: 32),
+          title: const Text('Contact details'),
+          subtitle: const Text('Email, phone, WhatsApp and Instagram shown to users'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.push(context, fadeSlideRoute(const _ContactSettingsScreen())),
+        )),
         Card(child: ListTile(
           leading: const GradientIconBadge(icon: Icons.person_remove, size: 32),
           title: const Text('Account deletion requests'),
@@ -796,6 +789,122 @@ class _MemberSummaryState extends State<_MemberSummary> {
         Text('${assessment['responses']}'),
       ],
     ]);
+  }
+}
+
+/// (v0.14 item 6) Admin editor for the Contact Us details. The phone number
+/// and Instagram handle can be filled in later without an app release.
+class _ContactSettingsScreen extends StatefulWidget {
+  const _ContactSettingsScreen();
+  @override
+  State<_ContactSettingsScreen> createState() => _ContactSettingsScreenState();
+}
+
+class _ContactSettingsScreenState extends State<_ContactSettingsScreen> {
+  final _email = TextEditingController();
+  final _phone = TextEditingController();
+  final _whatsapp = TextEditingController();
+  final _instagram = TextEditingController();
+  bool loading = true, saving = false;
+  String? error, message;
+
+  @override
+  void initState() { super.initState(); _load(); }
+
+  @override
+  void dispose() {
+    _email.dispose(); _phone.dispose(); _whatsapp.dispose(); _instagram.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    setState(() { loading = true; error = null; });
+    try {
+      final c = Map<String, dynamic>.from(await ApiClient.instance.get('/api/auth/contact'));
+      _email.text = '${c['email'] ?? ''}';
+      _phone.text = '${c['phone'] ?? ''}';
+      _whatsapp.text = '${c['whatsapp'] ?? ''}';
+      _instagram.text = '${c['instagram'] ?? ''}';
+    } on ApiException catch (e) { error = e.message; }
+    catch (_) { error = 'Cannot reach server.'; }
+    if (mounted) setState(() => loading = false);
+  }
+
+  Future<void> _save() async {
+    setState(() { saving = true; message = null; });
+    try {
+      await ApiClient.instance.put('/api/admin/contact', {
+        'email': _email.text.trim(),
+        'phone': _phone.text.trim(),
+        'whatsapp': _whatsapp.text.trim(),
+        'instagram': _instagram.text.trim().replaceAll('@', ''),
+      });
+      setState(() => message = 'Saved. Users see these immediately.');
+    } on ApiException catch (e) {
+      setState(() => message = e.message);
+    } finally {
+      if (mounted) setState(() => saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Contact details')),
+      body: GlowBackground(
+        child: loading
+            ? const SkeletonList(count: 2)
+            : error != null
+                ? ErrorRetry(message: error!, onRetry: _load)
+                : ListView(padding: const EdgeInsets.all(16), children: [
+                    const Text(
+                      'These appear on the Contact us screen in the app. Leave a field '
+                      'empty to hide that row.',
+                      style: TextStyle(fontSize: 12, color: Color(0xFF9A9AA6)),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _email,
+                      keyboardType: TextInputType.emailAddress,
+                      decoration: const InputDecoration(
+                          labelText: 'Support email', helperText: 'Opens the mail app when tapped'),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _phone,
+                      keyboardType: TextInputType.phone,
+                      decoration: const InputDecoration(
+                          labelText: 'Phone', helperText: 'Dials when tapped, e.g. +962 7 9000 0000'),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _whatsapp,
+                      keyboardType: TextInputType.phone,
+                      decoration: const InputDecoration(
+                          labelText: 'WhatsApp', helperText: 'Number in international format'),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _instagram,
+                      decoration: const InputDecoration(
+                          labelText: 'Instagram handle', helperText: 'Without the @'),
+                    ),
+                    if (message != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 14),
+                        child: Text(message!, style: const TextStyle(fontSize: 13)),
+                      ),
+                    const SizedBox(height: 20),
+                    FilledButton(
+                      onPressed: saving ? null : _save,
+                      child: saving
+                          ? const SizedBox(height: 20, width: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Text('Save'),
+                    ),
+                  ]),
+      ),
+    );
   }
 }
 

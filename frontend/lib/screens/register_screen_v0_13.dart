@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
-import 'package:intl/intl.dart';
 import '../core/api_v0_13.dart';
 import '../core/i18n_v0_13.dart';
 import '../core/auth_state_v0_13.dart';
@@ -21,14 +20,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _phone = TextEditingController();
   final _password = TextEditingController();
   final _first = TextEditingController();
-  final _last = TextEditingController();
-  final _birthPlace = TextEditingController();
-
-  DateTime? _dob; // calendar (date only), items 10,11
-  String? _nationality; // country dropdown
-  String? _location; // admin-configured dropdown
-
-  List<dynamic> _locations = [];
+  final _last = TextEditingController(); // calendar (date only), items 10,11
+  // (v0.14 item 9) Nationality defaults to Jordan — almost every member is
+  // Jordanian — and is searchable because the list is ~200 entries long.
+  String? _nationality = 'Jordan';
   List<dynamic> _questions = [];
   final Map<String, dynamic> _answers = {};
   final List<Map<String, dynamic>> _docs = [];
@@ -46,9 +41,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   Future<void> _loadRefData() async {
-    try {
-      _locations = await ApiClient.instance.get('/api/auth/locations');
-    } catch (_) {}
+    try {} catch (_) {}
     try {
       _questions = await ApiClient.instance.get('/api/auth/questionnaire');
     } catch (_) {}
@@ -59,18 +52,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
       RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(e);
   bool _validPhone(String p) =>
       RegExp(r'^0\d{9}$').hasMatch(p); // 07XXXXXXXX (10 digits)
-
-  Future<void> _pickDob() async {
-    final now = DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: DateTime(now.year - 25),
-      firstDate: DateTime(now.year - 100),
-      lastDate: now,
-      helpText: 'Select date of birth',
-    );
-    if (picked != null) setState(() => _dob = picked);
-  }
 
   Future<void> _pickDocument(String docType) async {
     final source = await showModalBottomSheet<String>(
@@ -163,7 +144,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
       return 'Phone must be 10 digits starting with 0 (e.g. 0791234567)';
     if (_password.text.length < 8)
       return 'Password must be at least 8 characters';
-    if (_dob == null) return 'Please select your date of birth';
     if (_nationality == null) return 'Please select your nationality';
     if (isCoach && _nationality == null)
       return 'Please select your nationality';
@@ -183,19 +163,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
     try {
       final path =
           isCoach ? '/api/auth/register/coach' : '/api/auth/register/member';
-      final dobStr = DateFormat('yyyy-MM-dd').format(_dob!);
+
       final body = {
         'email': _email.text.trim(),
         'phone': _phone.text.trim(),
         'password': _password.text,
         'firstName': _first.text.trim(),
         'lastName': _last.text.trim(),
-        'dateOfBirth': dobStr,
         'nationality': _nationality,
-        'birthPlace': _birthPlace.text.trim(),
-        'location': _location,
-        if (isCoach) 'documents': _docs,
-        if (!isCoach) 'assessment': _answers,
       };
       final res = await ApiClient.instance.post(path, body);
       setState(() {
@@ -306,12 +281,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
       _f(_email, 'Email', keyboard: TextInputType.emailAddress),
       _f(_phone, 'Phone (07XXXXXXXX)', keyboard: TextInputType.phone),
       _f(_password, 'Password (min 8)', obscure: true),
-      _dobField(),
       _nationalityField(),
-      _f(_birthPlace, 'Birth place'),
-      _locationField(),
-      if (!isCoach) ..._questionFields(),
-      if (isCoach) ..._coachDocs(),
+      // (v0.14 items 1, 2) Date of birth, area, the fitness questionnaire and
+      // coach documents all moved to the Complete Profile step inside the app.
+      // Testers abandoned the old eight-field signup form.
+      Padding(
+        padding: const EdgeInsets.only(top: 4, bottom: 8),
+        child: Text(
+          tr(context, 'You will add a few more details after signing in.'),
+          style: const TextStyle(fontSize: 12, color: Color(0xFF9A9AA6)),
+        ),
+      ),
       if (_error != null)
         Padding(
             padding: const EdgeInsets.only(top: 8),
@@ -329,53 +309,68 @@ class _RegisterScreenState extends State<RegisterScreen> {
     ]);
   }
 
-  Widget _dobField() => Padding(
+  Widget _nationalityField() => Padding(
         padding: const EdgeInsets.only(bottom: 12),
         child: InkWell(
-          onTap: _pickDob,
+          onTap: _pickNationality,
+          borderRadius: BorderRadius.circular(12),
           child: InputDecorator(
             decoration: InputDecoration(
-                labelText: tr(context, 'Date of birth'),
-                border: OutlineInputBorder(),
-                suffixIcon: Icon(Icons.calendar_today)),
-            child: Text(_dob == null
-                ? 'Tap to select'
-                : DateFormat('d MMM yyyy').format(_dob!)),
+              labelText: tr(context, 'Nationality'),
+              border: const OutlineInputBorder(),
+              suffixIcon: const Icon(Icons.search),
+            ),
+            child: Text(_nationality ?? tr(context, 'Tap to select')),
           ),
         ),
       );
 
-  Widget _nationalityField() => Padding(
-        padding: const EdgeInsets.only(bottom: 12),
-        child: DropdownButtonFormField<String>(
-          isExpanded: true,
-          value: _nationality,
-          decoration: InputDecoration(
-              labelText: tr(context, 'Nationality'),
-              border: OutlineInputBorder()),
-          items: kCountries
-              .map((c) => DropdownMenuItem(value: c, child: Text(c)))
-              .toList(),
-          onChanged: (v) => setState(() => _nationality = v),
-        ),
-      );
-
-  Widget _locationField() => Padding(
-        padding: const EdgeInsets.only(bottom: 12),
-        child: DropdownButtonFormField<String>(
-          isExpanded: true,
-          value: _location,
-          decoration: InputDecoration(
-              labelText: tr(context, 'Location (city / area)'),
-              border: OutlineInputBorder()),
-          items: _locations
-              .map<DropdownMenuItem<String>>((l) => DropdownMenuItem(
-                  value: l['name_en'].toString(),
-                  child: Text(l['name_en'].toString())))
-              .toList(),
-          onChanged: (v) => setState(() => _location = v),
-        ),
-      );
+  /// Searchable country picker — typing filters the list as you go.
+  Future<void> _pickNationality() async {
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (ctx) {
+        String query = '';
+        return StatefulBuilder(builder: (c, setS) {
+          final list = kCountries
+              .where((x) => x.toLowerCase().contains(query.toLowerCase()))
+              .toList();
+          return SizedBox(
+            height: MediaQuery.of(ctx).size.height * 0.75,
+            child: Column(children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
+                child: TextField(
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    hintText: tr(ctx, 'Search nationality'),
+                    prefixIcon: const Icon(Icons.search),
+                  ),
+                  onChanged: (v) => setS(() => query = v),
+                ),
+              ),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: list.length,
+                  itemBuilder: (_, i) => ListTile(
+                    dense: true,
+                    title: Text(list[i]),
+                    trailing: list[i] == _nationality
+                        ? const Icon(Icons.check, size: 18)
+                        : null,
+                    onTap: () => Navigator.pop(ctx, list[i]),
+                  ),
+                ),
+              ),
+            ]),
+          );
+        });
+      },
+    );
+    if (picked != null) setState(() => _nationality = picked);
+  }
 
   List<Widget> _questionFields() {
     if (_questions.isEmpty) return [];

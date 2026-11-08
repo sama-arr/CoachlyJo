@@ -114,13 +114,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
   }
 
-  Future<void> _delete(Map n) async {
-    try {
-      await ApiClient.instance.delete('/api/notifications/${n['id']}');
-      _load();
-    } on ApiException catch (_) {}
-  }
-
   /// Icon + colour per event family, so the list is scannable.
   (IconData, Color) _style(String type) {
     if (type.startsWith('booking_accepted') || type == 'coach_approved' || type == 'package_activated') {
@@ -232,11 +225,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                               style: const TextStyle(fontSize: 10, color: Color(0xFF6E6E7A))),
                                         ]),
                                       ),
-                                      IconButton(
-                                        icon: const Icon(Icons.close, size: 16),
-                                        color: const Color(0xFF6E6E7A),
-                                        onPressed: () => _delete(n),
-                                      ),
+                                      // (v0.14 item 14) No delete button:
+                                      // notifications are a record of what
+                                      // happened and should not disappear.
+                                      const SizedBox(width: 4),
                                     ]),
                                   ),
                                 ),

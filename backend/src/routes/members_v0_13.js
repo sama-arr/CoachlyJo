@@ -3,6 +3,20 @@ const { pool } = require('../db/pool_v0_13');
 const { authenticate, requireRole } = require('../middleware/auth_v0_13');
 const { notifyAdmins } = require('../services/notification.service_v0_13');
 
+// (v0.14 item 2) The Complete Profile step is mandatory: a member cannot buy a
+// package or book a session until it is done. Enforced here so it holds even if
+// the app is out of date — the response tells the app what is still missing.
+async function requireCompleteProfile(req, res, next) {
+  const { profileStatus } = require('./profile_v0_13');
+  const st = await profileStatus(req.user.id, 'member');
+  if (st.complete) return next();
+  return res.status(403).json({
+    error: 'Please complete your profile first.',
+    profileIncomplete: true,
+    missing: st.missing,
+  });
+}
+
 const router = express.Router();
 
 // Search approved coaches (spec §3.3, §4.1). Optional ?q= name filter.
@@ -155,7 +169,7 @@ function validateProof(proof) {
 
 // Member requests a package FOR A SPECIFIC COACH (item 7), attaching proof of
 // payment (item 6) -> creates pending_payment row, returns payment note.
-router.post('/packages/request', authenticate, requireRole('member'), async (req, res) => {
+router.post('/packages/request', authenticate, requireRole('member'), requireCompleteProfile, async (req, res) => {
   const { packageDefId, coachId, proof } = req.body || {};
   if (!packageDefId) return res.status(400).json({ error: 'packageDefId required' });
   if (!coachId) return res.status(400).json({ error: 'coachId required — packages are purchased for a specific coach' });
