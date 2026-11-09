@@ -711,3 +711,75 @@ class AppTheme extends ChangeNotifier {
     }
   }
 }
+
+// =============================================================================
+// (v0.15 item 2) Semantic colours.
+//
+// The light theme shipped in v0.14 looked wrong because ~90 colours were
+// hardcoded for dark mode when the app was dark-only: the green accent went
+// muddy on white and the greys became unreadable. Patching each screen would
+// have left the next screen free to reintroduce the problem, so colours now
+// resolve from the active Brightness in one place.
+//
+// Usage:  final c = AppColors.of(context);
+//         Text(x, style: TextStyle(color: c.muted))
+//         StatusPill(label: 'active', color: c.success)
+// =============================================================================
+class AppColors {
+  final Brightness brightness;
+  const AppColors(this.brightness);
+
+  factory AppColors.of(BuildContext context) =>
+      AppColors(Theme.of(context).brightness);
+
+  bool get isLight => brightness == Brightness.light;
+
+  /// Body text on the page background.
+  Color get text => isLight ? const Color(0xFF1B1B22) : const Color(0xFFEDEDF2);
+
+  /// Secondary text: captions, helper lines, timestamps.
+  Color get muted => isLight ? const Color(0xFF5E5E6E) : const Color(0xFF9A9AA6);
+
+  /// Tertiary text: the faintest readable level.
+  Color get faint => isLight ? const Color(0xFF7C7C8A) : const Color(0xFF6E6E7A);
+
+  /// Body copy inside tinted panels (hero, banners).
+  Color get onPanel => isLight ? const Color(0xFF32323E) : const Color(0xFFCFCFDA);
+
+  /// Hairlines and card borders.
+  Color get border => isLight ? const Color(0xFFE2DFE9) : const Color(0xFF23232C);
+
+  /// Stronger divider / outline.
+  Color get outline => isLight ? const Color(0xFFCFCBD9) : const Color(0xFF3A3A46);
+
+  /// Panel surface behind content.
+  Color get surface => isLight ? const Color(0xFFFFFFFF) : const Color(0xFF15151B);
+
+  /// Raised surface (dialogs, selected rows).
+  Color get surfaceHigh => isLight ? const Color(0xFFF2F0F6) : const Color(0xFF1D1D25);
+
+  /// Page background.
+  Color get background => isLight ? const Color(0xFFF7F6F9) : const Color(0xFF0A0A0E);
+
+  // ---- status colours -------------------------------------------------------
+  // The dark palette's mint green (#3ED598) fails contrast on white, which is
+  // exactly what testers reported. Light mode uses a deeper green, and
+  // `onSuccess` gives text/icons drawn ON a success-tinted chip.
+
+  Color get success => isLight ? const Color(0xFF1B7F53) : const Color(0xFF3ED598);
+  Color get warning => isLight ? const Color(0xFFB85C06) : const Color(0xFFD9700F);
+  Color get danger  => isLight ? const Color(0xFFC62348) : const Color(0xFFFF5470);
+  Color get info    => isLight ? const Color(0xFFB01485) : const Color(0xFFC91E97);
+  Color get neutral => isLight ? const Color(0xFF6B6B7A) : const Color(0xFF6E6E7A);
+
+  /// Readable foreground for text or icons placed on a tinted status chip.
+  Color onStatus(Color status) => isLight ? status : status;
+
+  /// Fill for a status chip/cell — tuned so the label stays readable in both
+  /// themes (the v0.14 bug was a 0.38-alpha fill with dark text on white).
+  Color statusFill(Color status) =>
+      status.withValues(alpha: isLight ? 0.14 : 0.18);
+
+  Color statusBorder(Color status) =>
+      status.withValues(alpha: isLight ? 0.55 : 0.50);
+}

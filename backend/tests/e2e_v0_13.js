@@ -1273,9 +1273,73 @@ async function completeCoachProfile(token) {
     check('zoom acceptance scenario set up', false, JSON.stringify(zBooking.data));
   }
 
+  console.log('\n=== 25w. SEED IS IDEMPOTENT (v0.15) ===');
+  // Re-running the seed used to duplicate the whole catalogue because the
+  // ON CONFLICT clause had no unique constraint to act on.
+  const catBefore = (await api('GET', '/api/members/packages/catalogue', null, memberTok)).data.length;
+  const names = await pool.query(
+    `SELECT name_en, COUNT(*)::int n FROM package_definitions GROUP BY name_en HAVING COUNT(*) > 1`);
+  check('no duplicate package definitions exist', names.rowCount === 0, JSON.stringify(names.rows));
+  check('catalogue has exactly 8 active packages', catBefore === 8, `n=${catBefore}`);
+  const dupTry = await pool.query(
+    `INSERT INTO package_definitions (name_en,name_ar,class_count,price,validity_weeks,mode,is_single)
+     VALUES ('6 Classes — Online','تكرار',6,90.00,8,'online',FALSE)
+     ON CONFLICT (name_en) DO NOTHING RETURNING id`);
+  check('the unique constraint blocks a duplicate insert', dupTry.rowCount === 0);
+
+  console.log('\n=== 25x. INTEGRATION HEALTH PANEL (v0.15) ===');
+  const health = await api('GET', '/api/health/integrations', null, adminTok);
+  check('admin can read integration health', health.status === 200, JSON.stringify(health.data).slice(0, 120));
+  check('health reports the Zoom variables it needs',
+    Array.isArray(health.data.zoom.missing) && typeof health.data.zoom.configured === 'boolean');
+  check('health counts online sessions with no meeting link',
+    typeof health.data.zoom.sessionsWithoutLink === 'number');
+  check('health reports email, push and schema state',
+    typeof health.data.email.configured === 'boolean'
+    && typeof health.data.push.configured === 'boolean'
+    && health.data.schema.expected === 15, JSON.stringify(health.data.schema));
+  check('a member cannot read integration health',
+    (await api('GET', '/api/health/integrations', null, memberTok)).status === 403);
+
+  console.log('\n=== 25y. MISSING MEETING LINK: RETRY + MANUAL (v0.15 bug 4) ===');
+  // A confirmed online booking whose link failed to generate must be visible
+  // and recoverable, not silently empty.
+  const lpOpen = (await api('GET', '/api/coaches/my-sessions?scope=open', null, coachTok)).data
+    .filter((x) => x.delivery === 'online');
+  const lpBooking = await api('POST', '/api/bookings', { sessionId: lpOpen[0].id }, shortTok);
+  if (lpBooking.status === 201) {
+    await api('POST', `/api/bookings/${lpBooking.data.id}/decision`, { accept: true }, coachTok);
+    // Simulate the v0.14 failure: accepted, online, no link.
+    await pool.query(
+      `UPDATE coach_sessions SET zoom_join_url = NULL, zoom_start_url = NULL, zoom_meeting_id = NULL
+        WHERE id = $1`, [lpOpen[0].id]);
+
+    const memberView = (await api('GET', '/api/members/bookings?scope=upcoming', null, shortTok))
+      .data.find((b) => b.id === lpBooking.data.id);
+    check('member booking is flagged link_pending', memberView && memberView.link_pending === true,
+      JSON.stringify(memberView || {}).slice(0, 120));
+    const coachView = (await api('GET', '/api/coaches/bookings', null, coachTok))
+      .data.find((b) => b.id === lpBooking.data.id);
+    check('coach booking is flagged link_pending', coachView && coachView.link_pending === true);
+
+    const retried = await api('POST', `/api/bookings/${lpBooking.data.id}/retry-meeting-link`, {}, coachTok);
+    check('coach can retry automatic link creation', retried.status === 200 && retried.data.created === true,
+      JSON.stringify(retried.data));
+    const afterRetry = (await api('GET', '/api/members/bookings?scope=upcoming', null, shortTok))
+      .data.find((b) => b.id === lpBooking.data.id);
+    check('link_pending clears once a link exists',
+      afterRetry && afterRetry.link_pending === false && !!afterRetry.zoom_join_url);
+    check('retrying when a link already exists is refused',
+      (await api('POST', `/api/bookings/${lpBooking.data.id}/retry-meeting-link`, {}, coachTok)).status === 409);
+    check('member is notified when the link arrives',
+      (await api('GET', '/api/notifications', null, shortTok)).data.items.some((n) => n.type === 'zoom_link'));
+  } else {
+    check('link-pending scenario set up', false, JSON.stringify(lpBooking.data));
+  }
+
   console.log('\n=== 26. SCHEMA VERSION HEALTH ===');
   const sv = await api('GET', '/health/schema', null, null);
-  check('schema reports up to date (v14)', sv.status === 200 && sv.data.upToDate === true && sv.data.current === 14, JSON.stringify(sv.data));
+  check('schema reports up to date (v15)', sv.status === 200 && sv.data.upToDate === true && sv.data.current === 15, JSON.stringify(sv.data));
 
   console.log(`\n=== RESULT: ${pass} passed, ${fail} failed ===`);
   await pool.end().catch(() => {});

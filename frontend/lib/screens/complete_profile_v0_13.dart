@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
-import 'package:image_picker/image_picker.dart';
+import '../core/upload_picker_v0_13.dart';
 import 'dart:convert';
 import '../core/api_v0_13.dart';
 import '../core/theme_v0_13.dart';
@@ -45,10 +44,10 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
   // coach
   final _years = TextEditingController();
   final Set<String> specialties = {};
-  final List<PlatformFile> bachelorDocs = [];
-  final List<PlatformFile> otherDocs = [];
-  final List<PlatformFile> experienceDocs = [];
-  XFile? photo;
+  final List<PickedUpload> bachelorDocs = [];
+  final List<PickedUpload> otherDocs = [];
+  final List<PickedUpload> experienceDocs = [];
+  PickedUpload? photo;
 
   static const coachSpecialties = [
     'Strength training',
@@ -107,28 +106,18 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
     if (picked != null) setState(() => dob = picked);
   }
 
-  Future<void> _pickDocuments(List<PlatformFile> target) async {
-    final res = await FilePicker.platform.pickFiles(
-      allowMultiple: true,
-      withData: true,
-      type: FileType.custom,
-      allowedExtensions: ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png'],
-    );
-
-    if (res != null) {
-      setState(() {
-        target.addAll(res.files.where((f) => f.bytes != null));
-      });
-    }
+  /// (v0.15 item 1) Camera, gallery or files — a coach holding a paper
+  /// certificate can photograph it instead of having to scan it first.
+  Future<void> _pickDocuments(List<PickedUpload> target) async {
+    final picked = await pickUploads(context);
+    if (picked.isNotEmpty) setState(() => target.addAll(picked));
   }
 
+  /// The profile photo accepts camera and gallery (a PDF makes no sense here).
   Future<void> _pickPhoto() async {
-    final picked = await ImagePicker().pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 1024,
-        maxHeight: 1024,
-        imageQuality: 85);
-    if (picked != null) setState(() => photo = picked);
+    final picked =
+        await pickUploads(context, imagesOnly: true, allowMultiple: false);
+    if (picked.isNotEmpty) setState(() => photo = picked.first);
   }
 
   String? _validate() {
@@ -182,36 +171,19 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
           'yearsExperience': int.parse(_years.text.trim()),
           'specialties': specialties.toList(),
           'documents': [
-            ...bachelorDocs.map((f) => {
-                  'docType': 'degree_certificate',
-                  'fileName': f.name,
-                  'mimeType': _mimeFor(f.name),
-                  'dataBase64': base64Encode(f.bytes!),
-                }),
-            ...otherDocs.map((f) => {
-                  'docType': 'additional_certification',
-                  'fileName': f.name,
-                  'mimeType': _mimeFor(f.name),
-                  'dataBase64': base64Encode(f.bytes!),
-                }),
-            ...experienceDocs.map((f) => {
-                  'docType': 'experience_proof',
-                  'fileName': f.name,
-                  'mimeType': _mimeFor(f.name),
-                  'dataBase64': base64Encode(f.bytes!),
-                }),
+            ...bachelorDocs.map((f) => f.toJson(docType: 'degree_certificate')),
+            ...otherDocs
+                .map((f) => f.toJson(docType: 'additional_certification')),
+            ...experienceDocs.map((f) => f.toJson(docType: 'experience_proof')),
           ],
         });
         // Photo is optional and uploaded separately so a failure here never
         // costs the coach their completed profile.
         if (photo != null) {
-          final bytes = await photo!.readAsBytes();
           try {
             await ApiClient.instance.post('/api/profile/coach/photo', {
-              'mimeType': photo!.name.toLowerCase().endsWith('.png')
-                  ? 'image/png'
-                  : 'image/jpeg',
-              'dataBase64': base64Encode(bytes),
+              'mimeType': photo!.mimeType,
+              'dataBase64': photo!.dataBase64,
             });
           } on ApiException catch (_) {
             /* profile is saved; photo can be retried */
@@ -229,23 +201,13 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
     }
   }
 
-  String _mimeFor(String name) {
-    final n = name.toLowerCase();
-    if (n.endsWith('.pdf')) return 'application/pdf';
-    if (n.endsWith('.png')) return 'image/png';
-    if (n.endsWith('.doc')) return 'application/msword';
-    if (n.endsWith('.docx')) {
-      return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-    }
-    return 'image/jpeg';
-  }
-
   Widget _documentUploadCard({
     required String title,
-    required List<PlatformFile> files,
+    required List<PickedUpload> files,
     required bool isRequired,
     required int index,
   }) {
+    final c = AppColors.of(context);
     return FadeInUp(
       index: index,
       child: Card(
@@ -276,7 +238,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                       fontSize: 11,
                       color: isRequired
                           ? Theme.of(context).colorScheme.error
-                          : const Color(0xFF9A9AA6),
+                          : c.muted,
                     ),
                   ),
                 ],
@@ -284,9 +246,9 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
               const SizedBox(height: 6),
               Text(
                 tr(context, 'PDF, Word, JPG or PNG. Up to 10 MB each.'),
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
-                  color: Color(0xFF9A9AA6),
+                  color: c.muted,
                 ),
               ),
               const SizedBox(height: 10),
@@ -299,7 +261,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                         size: 20,
                       ),
                       title: Text(
-                        e.value.name,
+                        e.value.fileName,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontSize: 13),
                       ),
@@ -327,6 +289,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final c = AppColors.of(context);
     if (loading) return const SkeletonList(count: 3);
     if (error != null) return ErrorRetry(message: error!, onRetry: _load);
     final isCoach = widget.role == 'coach';
@@ -427,8 +390,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                       ]),
                       const SizedBox(height: 6),
                       Text(tr(context, 'Only your coach sees these answers.'),
-                          style: const TextStyle(
-                              fontSize: 11, color: Color(0xFF9A9AA6))),
+                          style: TextStyle(fontSize: 11, color: c.muted)),
                       const SizedBox(height: 10),
                       ...questions.map<Widget>((q) => _questionField(q)),
                     ]),
@@ -545,7 +507,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                 title: Text(tr(context, 'Profile photo')),
                 subtitle: Text(photo == null
                     ? tr(context, 'Optional — members see this on your profile')
-                    : photo!.name),
+                    : photo!.fileName),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: _pickPhoto,
               ),

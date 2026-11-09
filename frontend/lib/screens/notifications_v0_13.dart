@@ -116,11 +116,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   /// Icon + colour per event family, so the list is scannable.
   (IconData, Color) _style(String type) {
+    final c = AppColors.of(context);
     if (type.startsWith('booking_accepted') || type == 'coach_approved' || type == 'package_activated') {
-      return (Icons.check_circle, const Color(0xFF3ED598));
+      return (Icons.check_circle, c.success);
     }
     if (type.contains('reject') || type.contains('cancel') || type == 'no_show_recorded' || type == 'penalty_recorded') {
-      return (Icons.error_outline, const Color(0xFFFF5470));
+      return (Icons.error_outline, c.danger);
     }
     if (type == 'session_reminder') return (Icons.alarm, Brand.orange);
     if (type.startsWith('package')) return (Icons.card_membership, Brand.magenta);
@@ -142,6 +143,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final c = AppColors.of(context);
     final isAr = Localizations.localeOf(context).languageCode == 'ar';
     return Scaffold(
       appBar: AppBar(
@@ -183,7 +185,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                     color: isUnread ? Brand.surfaceHigh : Brand.surface,
                                     borderRadius: BorderRadius.circular(14),
                                     border: Border.all(
-                                      color: isUnread ? color.withValues(alpha: 0.35) : const Color(0xFF23232C),
+                                      color: isUnread ? color.withValues(alpha: 0.35) : c.border,
                                     ),
                                   ),
                                   child: Padding(
@@ -217,12 +219,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                           if (body.isNotEmpty) ...[
                                             const SizedBox(height: 3),
                                             Text(body,
-                                                style: const TextStyle(
-                                                    fontSize: 12, height: 1.4, color: Color(0xFFCFCFDA))),
+                                                style: TextStyle(
+                                                    fontSize: 12, height: 1.4, color: c.onPanel)),
                                           ],
                                           const SizedBox(height: 5),
                                           Text(_relative(context, '${n['created_at']}'),
-                                              style: const TextStyle(fontSize: 10, color: Color(0xFF6E6E7A))),
+                                              style: TextStyle(fontSize: 10, color: c.faint)),
                                         ]),
                                       ),
                                       // (v0.14 item 14) No delete button:

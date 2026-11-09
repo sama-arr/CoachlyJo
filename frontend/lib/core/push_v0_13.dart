@@ -72,6 +72,13 @@ class PushService {
 
       // Foreground messages do not show automatically — draw them ourselves so
       // a member using the app still sees a booking confirmation.
+      // (v0.15) Without this, iOS suppresses notifications entirely while the
+      // app is in the foreground. Android is handled by _showForeground below.
+      await FirebaseMessaging.instance
+          .setForegroundNotificationPresentationOptions(
+        alert: true, badge: true, sound: true,
+      );
+
       FirebaseMessaging.onMessage.listen(_showForeground);
 
       _ready = true;
@@ -85,6 +92,9 @@ class PushService {
   void _showForeground(RemoteMessage message) {
     final n = message.notification;
     if (n == null) return;
+    // iOS presents foreground alerts natively via the options set in init();
+    // drawing a local copy as well would show every notification twice.
+    if (Platform.isIOS) return;
     _local.show(
       n.hashCode,
       n.title,
@@ -102,13 +112,36 @@ class PushService {
     );
   }
 
+  /// (v0.15 bug 5) iOS hands Firebase an APNs token asynchronously, and
+  /// `getToken()` returns NULL until it has arrived. v0.14 called getToken()
+  /// immediately after requesting permission, so on iOS the device was never
+  /// registered and no notification could ever be delivered — which is exactly
+  /// why Android worked and iOS did not. Android has no APNs step, so this
+  /// simply returns straight away there.
+  Future<bool> _waitForApnsToken() async {
+    if (!Platform.isIOS) return true;
+    // Apple usually responds in well under a second; allow ~10s on a cold
+    // start or a poor connection before giving up for this session.
+    for (var attempt = 0; attempt < 20; attempt++) {
+      final apns = await FirebaseMessaging.instance.getAPNSToken();
+      if (apns != null) return true;
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+    }
+    debugPrint('[push] no APNs token yet — will retry on next launch');
+    return false;
+  }
+
   /// Register this device against the signed-in account. Called after login
   /// and whenever Firebase rotates the token.
   Future<void> registerDevice() async {
     if (!_ready) return;
     try {
+      if (!await _waitForApnsToken()) return;
       _token = await FirebaseMessaging.instance.getToken();
-      if (_token == null) return;
+      if (_token == null) {
+        debugPrint('[push] FCM token unavailable on this device');
+        return;
+      }
       await ApiClient.instance.post('/api/push/register', {
         'token': _token,
         'platform': Platform.isIOS ? 'ios' : 'android',

@@ -99,7 +99,6 @@ const Map<String, String> _ar = {
   'Add': 'إضافة',
   'Delete': 'حذف',
   'Submit': 'إرسال',
-  'Retry': 'إعادة المحاولة',
   'Log out': 'تسجيل الخروج',
   'Online': 'أونلاين',
   'In-person': 'حضوري',
@@ -144,7 +143,6 @@ const Map<String, String> _ar = {
   'No sessions available for this coach yet.':
       'لا توجد جلسات متاحة لهذا المدرب حالياً.',
   'Rating': 'التقييم',
-  'About': 'نبذة',
   'Upcoming': 'القادمة',
   'History': 'السجل',
   'Completed, cancelled and rejected sessions':
@@ -162,8 +160,7 @@ const Map<String, String> _ar = {
   'Cancel this booking?': 'إلغاء هذا الحجز؟',
   'Keep booking': 'الاحتفاظ بالحجز',
   'Yes, cancel': 'نعم، إلغاء',
-  'This session is today. Cancelling now counts as a same-day cancellation and a class WILL be deducted from your package.':
-      'هذه الجلسة اليوم. الإلغاء الآن يُعد إلغاءً في نفس اليوم وسيتم خصم حصة من باقتك.',
+  'This session is today. Cancelling now counts as a same-day cancellation and a class WILL be deducted from your package.': 'هذه الجلسة اليوم. الإلغاء الآن يُعد إلغاءً في نفس اليوم وسيتم خصم حصة من باقتك.',
   'This session is not today, so no class will be deducted from your package.':
       'هذه الجلسة ليست اليوم، لذلك لن يتم خصم أي حصة من باقتك.',
 
@@ -234,12 +231,9 @@ const Map<String, String> _ar = {
   'Thursday': 'الخميس',
   'Friday': 'الجمعة',
   'Saturday': 'السبت',
-  'Members book sessions generated from your weekly hours. Changes remove only unbooked future sessions — booked ones are always kept.':
-      'يحجز الأعضاء جلسات مولّدة من ساعاتك الأسبوعية. التعديلات تزيل الجلسات المستقبلية غير المحجوزة فقط — المحجوزة تبقى دائماً.',
-  'Your open bookable times, generated from your Availability. Booked sessions move to Requests. Delete a slot to make a one-off exception.':
-      'أوقاتك المتاحة للحجز، مولّدة من صفحة الأوقات المتاحة. الجلسات المحجوزة تنتقل إلى الطلبات. احذف وقتاً لعمل استثناء لمرة واحدة.',
-  'No open slots.\n\nSlots are generated automatically from your Availability — set your weekly hours in the Availability tab. Booked sessions appear under Requests.':
-      'لا توجد أوقات متاحة.\n\nتُولَّد الأوقات تلقائياً من صفحة الأوقات المتاحة — حدّد ساعاتك الأسبوعية هناك. الجلسات المحجوزة تظهر في الطلبات.',
+  'Members book sessions generated from your weekly hours. Changes remove only unbooked future sessions — booked ones are always kept.': 'يحجز الأعضاء جلسات مولّدة من ساعاتك الأسبوعية. التعديلات تزيل الجلسات المستقبلية غير المحجوزة فقط — المحجوزة تبقى دائماً.',
+  'Your open bookable times, generated from your Availability. Booked sessions move to Requests. Delete a slot to make a one-off exception.': 'أوقاتك المتاحة للحجز، مولّدة من صفحة الأوقات المتاحة. الجلسات المحجوزة تنتقل إلى الطلبات. احذف وقتاً لعمل استثناء لمرة واحدة.',
+  'No open slots.\n\nSlots are generated automatically from your Availability — set your weekly hours in the Availability tab. Booked sessions appear under Requests.': 'لا توجد أوقات متاحة.\n\nتُولَّد الأوقات تلقائياً من صفحة الأوقات المتاحة — حدّد ساعاتك الأسبوعية هناك. الجلسات المحجوزة تظهر في الطلبات.',
   'Active': 'الحاليون',
   'No requests yet.': 'لا توجد طلبات بعد.',
   'sessions added': 'جلسات أُضيفت',
@@ -318,10 +312,8 @@ const Map<String, String> _ar = {
   'Permanently remove your account and personal data':
       'إزالة حسابك وبياناتك الشخصية نهائياً',
   'This permanently deletes your account': 'سيؤدي هذا إلى حذف حسابك نهائياً',
-  'We erase your name, email, phone number, date of birth, location, questionnaire answers, uploaded documents and payment-proof images, and your notifications.':
-      'نمسح اسمك وبريدك الإلكتروني ورقم هاتفك وتاريخ ميلادك وموقعك وإجابات الاستبيان والمستندات المرفوعة وصور إثبات الدفع وإشعاراتك.',
-  'We keep an anonymised record of completed purchases where accounting law requires it. It cannot identify you.':
-      'نحتفظ بسجل مجهول الهوية لعمليات الشراء المكتملة عند اشتراط القانون المحاسبي ذلك، ولا يمكنه التعرف عليك.',
+  'We erase your name, email, phone number, date of birth, location, questionnaire answers, uploaded documents and payment-proof images, and your notifications.': 'نمسح اسمك وبريدك الإلكتروني ورقم هاتفك وتاريخ ميلادك وموقعك وإجابات الاستبيان والمستندات المرفوعة وصور إثبات الدفع وإشعاراتك.',
+  'We keep an anonymised record of completed purchases where accounting law requires it. It cannot identify you.': 'نحتفظ بسجل مجهول الهوية لعمليات الشراء المكتملة عند اشتراط القانون المحاسبي ذلك، ولا يمكنه التعرف عليك.',
   'Before you go': 'قبل أن تغادر',
   'upcoming session(s) will be cancelled': 'جلسة قادمة سيتم إلغاؤها',
   'unused class(es) will be lost': 'حصة غير مستخدمة ستفقدها',
@@ -418,8 +410,7 @@ const Map<String, String> _ar = {
       'هذه الساعة تحتوي على جلسة محجوزة ولا يمكن إزالتها.',
   'Remove hours from the start or the end of a block.':
       'أزل الساعات من بداية أو نهاية الفترة.',
-  'Long-press a block to switch it between online and in-person. Booked hours are locked.':
-      'اضغط مطولاً على الفترة لتبديلها بين أونلاين وحضوري. الساعات المحجوزة مقفلة.',
+  'Long-press a block to switch it between online and in-person. Booked hours are locked.': 'اضغط مطولاً على الفترة لتبديلها بين أونلاين وحضوري. الساعات المحجوزة مقفلة.',
   'Upcoming sessions': 'الجلسات القادمة',
   // specialties
   'Strength training': 'تدريب القوة',
@@ -434,6 +425,36 @@ const Map<String, String> _ar = {
   'Rehabilitation': 'إعادة التأهيل',
   'Nutrition coaching': 'الإرشاد الغذائي',
   'Cardio & endurance': 'الكارديو والتحمل',
+  // --- v0.15 ---
+  'About CoachlyJo': 'حول CoachlyJo',
+  'App version': 'إصدار التطبيق',
+  'Connected to': 'متصل بـ',
+  'Server': 'الخادم',
+  'Checking…': 'جارٍ التحقق…',
+  'reachable': 'متاح',
+  'Fitness coaching in Amman': 'تدريب لياقة في عمّان',
+  'Copy details for a bug report': 'نسخ التفاصيل لتقرير المشكلة',
+  'Details copied — paste them into your report.':
+      'تم نسخ التفاصيل — الصقها في تقريرك.',
+  'Choose a source': 'اختر المصدر',
+  'Take a photo': 'التقاط صورة',
+  'Use the camera now': 'استخدم الكاميرا الآن',
+  'Choose from gallery': 'اختيار من المعرض',
+  'Pictures already on your phone': 'الصور الموجودة على هاتفك',
+  'Choose a file': 'اختيار ملف',
+  'PDF or Word document': 'ملف PDF أو Word',
+  'Could not read that file. Please try another one.':
+      'تعذر قراءة هذا الملف. يرجى تجربة ملف آخر.',
+  'Meeting link coming soon — your coach will add it.':
+      'رابط الاجتماع قادم قريباً — سيضيفه مدربك.',
+  'No meeting link yet': 'لا يوجد رابط اجتماع بعد',
+  'Retry': 'إعادة المحاولة',
+  'Add my link': 'إضافة رابطي',
+  'Add a meeting link': 'إضافة رابط اجتماع',
+  'Paste your Zoom or Google Meet link. The member is notified straight away.':
+      'الصق رابط زوم أو جوجل ميت. سيتم إشعار العضو فوراً.',
+  'Meeting link created.': 'تم إنشاء رابط الاجتماع.',
+  'Link saved and the member was notified.': 'تم حفظ الرابط وإشعار العضو.',
   // --- settings ---
   'Language': 'اللغة',
   'Change bio': 'تعديل النبذة',

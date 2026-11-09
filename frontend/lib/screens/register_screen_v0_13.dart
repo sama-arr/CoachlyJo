@@ -7,6 +7,7 @@ import '../core/api_v0_13.dart';
 import '../core/i18n_v0_13.dart';
 import '../core/auth_state_v0_13.dart';
 import '../core/countries_v0_13.dart';
+import '../core/theme_v0_13.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -266,6 +267,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   Widget _registerForm() {
+    final c = AppColors.of(context);
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       SegmentedButton<bool>(
         segments: [
@@ -289,7 +291,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         padding: const EdgeInsets.only(top: 4, bottom: 8),
         child: Text(
           tr(context, 'You will add a few more details after signing in.'),
-          style: const TextStyle(fontSize: 12, color: Color(0xFF9A9AA6)),
+          style: TextStyle(fontSize: 12, color: c.muted),
         ),
       ),
       if (_error != null)

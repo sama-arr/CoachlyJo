@@ -52,11 +52,12 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
   }
 
   Widget _row(IconData icon, String label, String value, VoidCallback onTap) {
+    final c = AppColors.of(context);
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
       child: ListTile(
         leading: GradientIconBadge(icon: icon, size: 34),
-        title: Text(label, style: const TextStyle(fontSize: 12, color: Color(0xFF9A9AA6))),
+        title: Text(label, style: TextStyle(fontSize: 12, color: c.muted)),
         subtitle: Text(value,
             style: TextStyle(
                 fontSize: 15,

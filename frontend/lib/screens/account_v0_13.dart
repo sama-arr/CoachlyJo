@@ -26,22 +26,32 @@ class _LegalScreenState extends State<LegalScreen> {
   String? error;
 
   @override
-  void initState() { super.initState(); _load(); }
+  void initState() {
+    super.initState();
+    _load();
+  }
 
   Future<void> _load() async {
-    setState(() { loading = true; error = null; });
+    setState(() {
+      loading = true;
+      error = null;
+    });
     try {
       final all = await ApiClient.instance.get('/api/account/legal');
       blocks = widget.onlyKey == null
           ? all
           : (all as List).where((b) => b['key'] == widget.onlyKey).toList();
-    } on ApiException catch (e) { error = e.message; }
-    catch (_) { error = 'Cannot reach server.'; }
+    } on ApiException catch (e) {
+      error = e.message;
+    } catch (_) {
+      error = 'Cannot reach server.';
+    }
     if (mounted) setState(() => loading = false);
   }
 
   @override
   Widget build(BuildContext context) {
+    final c = AppColors.of(context);
     final isAr = Localizations.localeOf(context).languageCode == 'ar';
     return Scaffold(
       appBar: AppBar(title: Text(tr(context, 'Legal'))),
@@ -50,27 +60,42 @@ class _LegalScreenState extends State<LegalScreen> {
             ? const SkeletonList(count: 2)
             : error != null
                 ? ErrorRetry(message: error!, onRetry: _load)
-                : ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 40), children: [
-                    ...blocks.asMap().entries.map((e) {
-                      final b = e.value as Map;
-                      final title = isAr && '${b['title_ar']}'.trim().isNotEmpty
-                          ? '${b['title_ar']}' : '${b['title_en']}';
-                      final body = isAr && '${b['body_ar']}'.trim().isNotEmpty
-                          ? '${b['body_ar']}' : '${b['body_en']}';
-                      return FadeInUp(
-                        index: e.key,
-                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          const SizedBox(height: 12),
-                          Text(title, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800)),
-                          const SizedBox(height: 8),
-                          const GradientRule(width: 46),
-                          const SizedBox(height: 12),
-                          Text(body, style: const TextStyle(fontSize: 13, height: 1.7, color: Color(0xFFCFCFDA))),
-                          const SizedBox(height: 22),
-                        ]),
-                      );
-                    }),
-                  ]),
+                : ListView(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
+                    children: [
+                        ...blocks.asMap().entries.map((e) {
+                          final b = e.value as Map;
+                          final title =
+                              isAr && '${b['title_ar']}'.trim().isNotEmpty
+                                  ? '${b['title_ar']}'
+                                  : '${b['title_en']}';
+                          final body =
+                              isAr && '${b['body_ar']}'.trim().isNotEmpty
+                                  ? '${b['body_ar']}'
+                                  : '${b['body_en']}';
+                          return FadeInUp(
+                            index: e.key,
+                            child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const SizedBox(height: 12),
+                                  Text(title,
+                                      style: const TextStyle(
+                                          fontSize: 19,
+                                          fontWeight: FontWeight.w800)),
+                                  const SizedBox(height: 8),
+                                  const GradientRule(width: 46),
+                                  const SizedBox(height: 12),
+                                  Text(body,
+                                      style: TextStyle(
+                                          fontSize: 13,
+                                          height: 1.7,
+                                          color: c.onPanel)),
+                                  const SizedBox(height: 22),
+                                ]),
+                          );
+                        }),
+                      ]),
       ),
     );
   }
@@ -88,6 +113,7 @@ class DeleteAccountScreen extends StatefulWidget {
 }
 
 class _DeleteAccountScreenState extends State<DeleteAccountScreen> {
+  AppColors get c => AppColors.of(context);
   Map? preview;
   bool loading = true;
   bool busy = false;
@@ -96,34 +122,52 @@ class _DeleteAccountScreenState extends State<DeleteAccountScreen> {
   final _password = TextEditingController();
 
   @override
-  void initState() { super.initState(); _load(); }
+  void initState() {
+    super.initState();
+    _load();
+  }
 
   @override
-  void dispose() { _confirm.dispose(); _password.dispose(); super.dispose(); }
+  void dispose() {
+    _confirm.dispose();
+    _password.dispose();
+    super.dispose();
+  }
 
   Future<void> _load() async {
-    setState(() { loading = true; error = null; });
+    setState(() {
+      loading = true;
+      error = null;
+    });
     try {
       preview = Map<String, dynamic>.from(
           await ApiClient.instance.get('/api/account/deletion-preview'));
-    } on ApiException catch (e) { error = e.message; }
-    catch (_) { error = 'Cannot reach server.'; }
+    } on ApiException catch (e) {
+      error = e.message;
+    } catch (_) {
+      error = 'Cannot reach server.';
+    }
     if (mounted) setState(() => loading = false);
   }
 
   bool get _ready =>
-      _confirm.text.trim().toUpperCase() == 'DELETE' && _password.text.isNotEmpty;
+      _confirm.text.trim().toUpperCase() == 'DELETE' &&
+      _password.text.isNotEmpty;
 
   Future<void> _delete() async {
     final sure = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(tr(ctx, 'Delete your account?')),
-        content: Text(tr(ctx, 'This cannot be undone. Your personal data will be erased and your upcoming sessions cancelled.')),
+        content: Text(tr(ctx,
+            'This cannot be undone. Your personal data will be erased and your upcoming sessions cancelled.')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr(ctx, 'Keep my account'))),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(tr(ctx, 'Keep my account'))),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Theme.of(ctx).colorScheme.error),
+            style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(ctx).colorScheme.error),
             onPressed: () => Navigator.pop(ctx, true),
             child: Text(tr(ctx, 'Delete permanently')),
           ),
@@ -134,15 +178,17 @@ class _DeleteAccountScreenState extends State<DeleteAccountScreen> {
 
     setState(() => busy = true);
     try {
-      await ApiClient.instance.delete('/api/account',
-          body: {'password': _password.text});
+      await ApiClient.instance
+          .delete('/api/account', body: {'password': _password.text});
       if (!mounted) return;
       // End the session: the account no longer exists.
       await context.read<AuthState>().logout();
       if (!mounted) return;
       Navigator.of(context).popUntil((r) => r.isFirst);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(tr(context, 'Your account and personal data have been deleted.'))),
+        SnackBar(
+            content: Text(tr(
+                context, 'Your account and personal data have been deleted.'))),
       );
     } on ApiException catch (e) {
       if (mounted) setState(() => error = e.message);
@@ -153,6 +199,7 @@ class _DeleteAccountScreenState extends State<DeleteAccountScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final c = AppColors.of(context);
     return Scaffold(
       appBar: AppBar(title: Text(tr(context, 'Delete account'))),
       body: GlowBackground(
@@ -162,22 +209,35 @@ class _DeleteAccountScreenState extends State<DeleteAccountScreen> {
                 Card(
                   child: Padding(
                     padding: const EdgeInsets.all(16),
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Row(children: [
-                        const GradientIconBadge(icon: Icons.delete_forever, size: 34),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(tr(context, 'This permanently deletes your account'),
-                              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-                        ),
-                      ]),
-                      const SizedBox(height: 14),
-                      Text(tr(context, 'We erase your name, email, phone number, date of birth, location, questionnaire answers, uploaded documents and payment-proof images, and your notifications.'),
-                          style: const TextStyle(fontSize: 13, height: 1.6, color: Color(0xFFCFCFDA))),
-                      const SizedBox(height: 10),
-                      Text(tr(context, 'We keep an anonymised record of completed purchases where accounting law requires it. It cannot identify you.'),
-                          style: const TextStyle(fontSize: 12, height: 1.6, color: Color(0xFF9A9AA6))),
-                    ]),
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(children: [
+                            const GradientIconBadge(
+                                icon: Icons.delete_forever, size: 34),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                  tr(context,
+                                      'This permanently deletes your account'),
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 15)),
+                            ),
+                          ]),
+                          const SizedBox(height: 14),
+                          Text(
+                              tr(context,
+                                  'We erase your name, email, phone number, date of birth, location, questionnaire answers, uploaded documents and payment-proof images, and your notifications.'),
+                              style: TextStyle(
+                                  fontSize: 13, height: 1.6, color: c.onPanel)),
+                          const SizedBox(height: 10),
+                          Text(
+                              tr(context,
+                                  'We keep an anonymised record of completed purchases where accounting law requires it. It cannot identify you.'),
+                              style: TextStyle(
+                                  fontSize: 12, height: 1.6, color: c.muted)),
+                        ]),
                   ),
                 ),
 
@@ -187,24 +247,27 @@ class _DeleteAccountScreenState extends State<DeleteAccountScreen> {
                   Card(
                     child: Padding(
                       padding: const EdgeInsets.all(16),
-                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text(tr(context, 'Before you go'),
-                            style: const TextStyle(fontWeight: FontWeight.w700)),
-                        const SizedBox(height: 10),
-                        _line(Icons.event_busy,
-                            '${preview!['upcomingSessions']} ${tr(context, 'upcoming session(s) will be cancelled')}'),
-                        if ((preview!['unusedClasses'] ?? 0) > 0)
-                          _line(Icons.card_membership,
-                              '${preview!['unusedClasses']} ${tr(context, 'unused class(es) will be lost')}',
-                              warn: true),
-                      ]),
+                      child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(tr(context, 'Before you go'),
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w700)),
+                            const SizedBox(height: 10),
+                            _line(Icons.event_busy,
+                                '${preview!['upcomingSessions']} ${tr(context, 'upcoming session(s) will be cancelled')}'),
+                            if ((preview!['unusedClasses'] ?? 0) > 0)
+                              _line(Icons.card_membership,
+                                  '${preview!['unusedClasses']} ${tr(context, 'unused class(es) will be lost')}',
+                                  warn: true),
+                          ]),
                     ),
                   ),
                 ],
 
                 const SizedBox(height: 16),
                 Text(tr(context, 'Type DELETE to confirm'),
-                    style: const TextStyle(fontSize: 12, color: Color(0xFF9A9AA6))),
+                    style: TextStyle(fontSize: 12, color: c.muted)),
                 const SizedBox(height: 6),
                 TextField(
                   controller: _confirm,
@@ -217,12 +280,15 @@ class _DeleteAccountScreenState extends State<DeleteAccountScreen> {
                   controller: _password,
                   obscureText: true,
                   onChanged: (_) => setState(() {}),
-                  decoration: InputDecoration(labelText: tr(context, 'Your password')),
+                  decoration:
+                      InputDecoration(labelText: tr(context, 'Your password')),
                 ),
                 if (error != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 12),
-                    child: Text(error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                    child: Text(error!,
+                        style: TextStyle(
+                            color: Theme.of(context).colorScheme.error)),
                   ),
                 const SizedBox(height: 20),
                 FilledButton(
@@ -232,8 +298,11 @@ class _DeleteAccountScreenState extends State<DeleteAccountScreen> {
                   ),
                   onPressed: (_ready && !busy) ? _delete : null,
                   child: busy
-                      ? const SizedBox(height: 20, width: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white))
                       : Text(tr(context, 'Delete my account')),
                 ),
                 const SizedBox(height: 10),
@@ -251,7 +320,7 @@ class _DeleteAccountScreenState extends State<DeleteAccountScreen> {
   Widget _line(IconData icon, String text, {bool warn = false}) => Padding(
         padding: const EdgeInsets.only(bottom: 8),
         child: Row(children: [
-          Icon(icon, size: 16, color: warn ? const Color(0xFFFF5470) : const Color(0xFF9A9AA6)),
+          Icon(icon, size: 16, color: warn ? c.danger : c.muted),
           const SizedBox(width: 8),
           Expanded(child: Text(text, style: const TextStyle(fontSize: 13))),
         ]),

@@ -1,4 +1,4 @@
-# CoachlyJo — Fitness Coaching Platform (v0.14 · app 1.1.0+2)
+# CoachlyJo — Fitness Coaching Platform (v0.15 · app 1.1.1+17)
 
 A mobile fitness-coaching platform connecting **Members** (clients) with verified **Coaches** for online and in-person sessions. Built per the consolidated spec v1.0.
 
@@ -96,6 +96,15 @@ SMTP_FROM="Apex Fitness <no-reply@example.com>"
 OTP_DEV_MODE=false
 ```
 
+
+> **All four Zoom variables are required.** `ZOOM_ACCOUNT_ID`, `ZOOM_CLIENT_ID`,
+> `ZOOM_CLIENT_SECRET` **and `ZOOM_HOST_USER`** (the email of the Zoom account
+> meetings are hosted under). If any one is missing the integration counts as
+> unconfigured: meetings are not created and bookings are accepted without a
+> link. Check **Admin → Setup → Integration health** after any deploy — it shows
+> exactly which variables are missing and how many confirmed sessions currently
+> have no link.
+
 ### 2c. Zoom setup — optional, needed for real meeting links
 
 1. Go to `marketplace.zoom.us` -> **Develop** -> **Build App** -> **Server-to-Server OAuth**.
@@ -117,7 +126,7 @@ and falls back to a placeholder so bookings are never blocked.
 
 > **Upgrading from an earlier version?** Just run `npm run migrate` on your
 > existing database — it is idempotent and applies only what is missing, then
-> `GET /health/schema` should report `{"current":14,"expected":14,"upToDate":true}`.
+> `GET /health/schema` should report `{"current":15,"expected":15,"upToDate":true}`.
 > No reseeding needed. 
 
 ```bash
@@ -209,7 +218,7 @@ node tests/e2e_v0_13.js
 
 Expected tail:
 ```
-=== RESULT: 338 passed, 0 failed ===
+=== RESULT: 352 passed, 0 failed ===
 ```
 
 > Check-count history: 123 (v0.4) -> 111 (v0.5) -> 126 (v0.6) -> 137 (v0.7) ->
@@ -375,6 +384,55 @@ Run `npm run migrate` (applies `schema.sql` then `migrate_v0_2.sql`) and `npm ru
 8. **Admin dashboards.** Reports tab now shows headline stats (revenue, sessions completed, active/total members, pending payments/coaches), revenue-per-week and sessions-per-week charts, package sales, and a coach performance leaderboard, all filterable by 7/30/90 days.
 9. **Coach dashboard.** New Dashboard tab for coaches: upcoming sessions, pending requests, completed sessions, active clients, completion rate, rating, and a weekly trend chart. Activity only — no revenue figures are exposed to coaches.
 10. **Coach sees their subscribers.** The Clients tab lists each member subscribed with that coach: package name, sessions used/remaining, expiry, next/last session, and contact details.
+
+### v0.15 — tester feedback round 2
+
+1. **Documents and the profile photo now upload from camera, gallery or files.**
+   v0.14 offered only the file browser, so a coach holding a paper certificate
+   had to photograph it, find it in Files and pick it from there. All three
+   document categories and the profile photo use the same three-source picker.
+2. **Light theme fixed properly.** The green status colour and the greys were
+   hardcoded dark-mode values, so on white the green went muddy and captions
+   became unreadable — on the cancellation policy, home, find-a-coach,
+   notifications, privacy and terms screens. ~90 hardcoded colours across 17
+   files are replaced by a semantic palette (`AppColors.of(context)`) that
+   resolves per brightness, with a deeper green for light mode. The static
+   checker now fails the build if a screen reintroduces a hardcoded colour in a
+   const context or uses one without scope.
+3. **About screen**, directly above Sign out: app version, build number, the API
+   host this build talks to, a live server check, and a one-tap "copy details
+   for a bug report" — so it is obvious whether a tester is on staging or
+   production.
+4. **Zoom link fixed — root cause: `ZOOM_HOST_USER` was missing from
+   `render.yaml`.** `hasCreds()` requires four variables and only three were
+   declared, so Zoom counted as unconfigured, meeting creation failed and
+   bookings were accepted with no link. Alongside the fix:
+   - `link_pending` is exposed to both apps: members see "meeting link coming
+     soon" instead of an empty space, and coaches get **Retry** and
+     **Add my link** actions;
+   - `POST /api/bookings/:id/retry-meeting-link` recreates a missing link after
+     a configuration fix, without cancelling and rebooking;
+   - **Admin → Integration health** (`GET /api/health/integrations`) reports
+     Zoom, SMTP, push and schema state plus the count of confirmed sessions with
+     no link, so a missing variable is visible instead of silent.
+5. **iOS push notifications fixed.** iOS hands Firebase an APNs token
+   asynchronously and `getToken()` returns null until it arrives; v0.14 called
+   it immediately, so iOS devices were never registered — which is exactly why
+   Android worked and iOS did not. The service now waits for the APNs token
+   (with a bounded retry) before registering, and sets
+   `setForegroundNotificationPresentationOptions` so alerts also appear while
+   the app is open. Foreground duplicates on iOS are suppressed.
+
+**Also fixed:** `npm run seed` duplicated the entire package catalogue on every
+run — the `ON CONFLICT DO NOTHING` had no unique constraint to act on, so a
+second seed left members seeing sixteen packages. Migration v0_15 removes
+unpurchased duplicates and adds the missing unique index; the seed is now
+genuinely idempotent, and a test guards it.
+
+**Carried over from your staging work:** questionnaire dropdowns, the three
+coach document categories mapped to the correct enum values, the pending-coach
+navigation fix, Firebase options for both platforms, Android desugaring and the
+staging Codemagic/Render configuration.
 
 ### v0.14 — tester feedback round
 

@@ -40,6 +40,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final c = AppColors.of(context);
     final lang = context.watch<AppLang>();
     return Scaffold(
       appBar: AppBar(
@@ -94,7 +95,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 Text(tr(context, 'Train with the right coach.'),
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: const Color(0xFF9A9AA6), letterSpacing: 0.2)),
+                        color: c.muted, letterSpacing: 0.2)),
                 const SizedBox(height: 32),
                 TextField(
                     controller: _email,

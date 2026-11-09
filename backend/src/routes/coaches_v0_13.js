@@ -341,7 +341,9 @@ router.get('/bookings', authenticate, requireRole('coach'), requireApprovedCoach
             CASE WHEN b.status IN ('accepted','completed') THEN u.phone END   AS member_phone,
             CASE WHEN b.status IN ('accepted','completed') THEN mp.location END AS member_location,
             CASE WHEN b.status IN ('accepted','completed') AND cs.delivery='online'
-                 THEN cs.zoom_join_url END AS zoom_join_url
+                 THEN cs.zoom_join_url END AS zoom_join_url,
+            (b.status='accepted' AND cs.delivery='online'
+             AND (cs.zoom_join_url IS NULL OR cs.zoom_join_url='')) AS link_pending
        FROM bookings b
        JOIN coach_sessions cs ON cs.id=b.session_id
        JOIN member_profiles mp ON mp.user_id=b.member_id

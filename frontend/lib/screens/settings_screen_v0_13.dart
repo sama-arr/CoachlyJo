@@ -3,8 +3,7 @@ import 'package:provider/provider.dart';
 import '../core/api_v0_13.dart';
 import '../core/i18n_v0_13.dart';
 import '../core/motion_v0_13.dart';
-import 'package:image_picker/image_picker.dart';
-import 'dart:convert';
+import '../core/upload_picker_v0_13.dart';
 import '../core/theme_v0_13.dart';
 import 'account_v0_13.dart';
 import 'contact_us_v0_13.dart';
@@ -332,15 +331,14 @@ class _CoachPhotoCardState extends State<_CoachPhotoCard> {
   String? message;
 
   Future<void> _pick() async {
-    final picked = await ImagePicker().pickImage(
-        source: ImageSource.gallery, maxWidth: 1024, maxHeight: 1024, imageQuality: 85);
-    if (picked == null) return;
+    // (v0.15 item 1) Camera or gallery, same as the documents.
+    final picked = await pickUploads(context, imagesOnly: true, allowMultiple: false);
+    if (picked.isEmpty) return;
     setState(() { busy = true; message = null; });
     try {
-      final bytes = await picked.readAsBytes();
       await ApiClient.instance.post('/api/profile/coach/photo', {
-        'mimeType': picked.name.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg',
-        'dataBase64': base64Encode(bytes),
+        'mimeType': picked.first.mimeType,
+        'dataBase64': picked.first.dataBase64,
       });
       setState(() => message = tr(context, 'Photo updated.'));
     } on ApiException catch (e) {
@@ -364,6 +362,7 @@ class _CoachPhotoCardState extends State<_CoachPhotoCard> {
 
   @override
   Widget build(BuildContext context) {
+    final c = AppColors.of(context);
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -378,7 +377,7 @@ class _CoachPhotoCardState extends State<_CoachPhotoCard> {
           ]),
           const SizedBox(height: 8),
           Text(tr(context, 'Members see this on your profile. It is optional.'),
-              style: const TextStyle(fontSize: 12, color: Color(0xFF9A9AA6))),
+              style: TextStyle(fontSize: 12, color: c.muted)),
           const SizedBox(height: 14),
           Row(children: [
             Expanded(

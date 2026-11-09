@@ -107,6 +107,7 @@ app.use('/api/admin', require('./routes/admin_v0_13'));
 app.use('/api/account', require('./routes/account_v0_13'));
 app.use('/api/profile', require('./routes/profile_v0_13').router);
 app.use('/api/push', require('./routes/push_v0_13'));
+app.use('/api/health', require('./routes/health_v0_13'));
 
 // (v0.13) Public pages required by the stores: a privacy policy URL and a
 // web account-deletion request form that works without the app installed.

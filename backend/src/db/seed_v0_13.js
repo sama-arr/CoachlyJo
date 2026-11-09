@@ -33,7 +33,10 @@ async function seed() {
         ('6 Classes — In-person','باقة 6 حصص حضوري',6,108.00,8,'in_person',FALSE),
         ('9 Classes — In-person','باقة 9 حصص حضوري',9,153.00,12,'in_person',FALSE),
         ('12 Classes — In-person','باقة 12 حصة حضوري',12,192.00,16,'in_person',FALSE)
-      ON CONFLICT DO NOTHING`);
+      -- (v0.15) The old 'ON CONFLICT DO NOTHING' had no constraint to act on,
+      -- so re-seeding duplicated the entire catalogue. name_en is unique as of
+      -- migration v0_15; this now really is idempotent.
+      ON CONFLICT (name_en) DO NOTHING`);
 
     // Slot templates (spec §5) — a 1-on-1 online slot and a group in-person slot
     await client.query(`
@@ -42,6 +45,7 @@ async function seed() {
         (6,'10:30','60',1,'in_person'),  -- Saturday 1-on-1 in person
         (0,'18:00','45',10,'in_person'), -- Sunday group class (cap 10)
         (1,'07:00','30',1,'online')      -- Monday early 1-on-1 online
+      -- Legacy table (unused since v0.5). Seed once, never duplicate.
       ON CONFLICT DO NOTHING`);
 
     // Payment note (spec §10.3)

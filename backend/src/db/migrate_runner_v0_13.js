@@ -11,7 +11,7 @@ const path = require('path');
 const { pool } = require('./pool_v0_13');
 
 const BASELINE = 'schema.sql';
-const INCREMENTALS = ['migrate_v0_2.sql', 'migrate_v0_3.sql', 'migrate_v0_4.sql', 'migrate_v0_5.sql', 'migrate_v0_6.sql', 'migrate_v0_7.sql', 'migrate_v0_8.sql', 'migrate_v0_9.sql', 'migrate_v0_10.sql', 'migrate_v0_11.sql', 'migrate_v0_12.sql', 'migrate_v0_13.sql', 'migrate_v0_14.sql'];
+const INCREMENTALS = ['migrate_v0_2.sql', 'migrate_v0_3.sql', 'migrate_v0_4.sql', 'migrate_v0_5.sql', 'migrate_v0_6.sql', 'migrate_v0_7.sql', 'migrate_v0_8.sql', 'migrate_v0_9.sql', 'migrate_v0_10.sql', 'migrate_v0_11.sql', 'migrate_v0_12.sql', 'migrate_v0_13.sql', 'migrate_v0_14.sql', 'migrate_v0_15.sql'];
 
 async function baselineApplied() {
   const r = await pool.query(
@@ -31,7 +31,7 @@ async function migrate() {
       console.log('Applying', f, '...');
       await pool.query(fs.readFileSync(p, 'utf8'));
     }
-    console.log('Schema applied successfully (v0.14).');
+    console.log('Schema applied successfully (v0.15).');
   } catch (err) {
     console.error('Migration failed:', err.message);
     process.exitCode = 1;

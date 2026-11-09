@@ -7,6 +7,7 @@ import '../core/i18n_v0_13.dart';
 import 'settings_screen_v0_13.dart';
 import 'contact_us_v0_13.dart';
 import 'account_v0_13.dart';
+import 'about_v0_13.dart';
 
 /// (v0.14 item 21) The settings cog is replaced by a hamburger that opens a
 /// real slide-out drawer, instead of a popup menu that could only ever hold a
@@ -17,6 +18,7 @@ class AppDrawer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = AppColors.of(context);
     final auth = context.read<AuthState>();
     final light = Theme.of(context).brightness == Brightness.light;
     final scheme = Theme.of(context).colorScheme;
@@ -60,7 +62,7 @@ class AppDrawer extends StatelessWidget {
                 auth.email ?? tr(context, 'Signed in'),
                 style: TextStyle(
                     fontSize: 12,
-                    color: light ? Brand.mutedLight : const Color(0xFFCFCFDA)),
+                    color: light ? Brand.mutedLight : c.onPanel),
                 overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: 2),
@@ -106,6 +108,11 @@ class AppDrawer extends StatelessWidget {
 
               const Divider(height: 18),
 
+              // (v0.15 item 3) About sits directly above Sign out and shows the
+              // version plus which API this build is talking to.
+              item(Icons.info_outline, tr(context, 'About'),
+                  () => Navigator.push(context, fadeSlideRoute(const AboutScreen()))),
+
               item(Icons.logout, tr(context, 'Sign out'), () => auth.logout(), danger: true),
             ]),
           ),
@@ -115,7 +122,7 @@ class AppDrawer extends StatelessWidget {
             child: Text('CoachlyJo',
                 style: TextStyle(
                     fontSize: 11,
-                    color: light ? Brand.mutedLight : const Color(0xFF6E6E7A))),
+                    color: light ? Brand.mutedLight : c.faint)),
           ),
         ]),
       ),

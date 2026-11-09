@@ -46,6 +46,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final c = AppColors.of(context);
     if (loading) return const SkeletonList(count: 3);
     if (error != null) return ErrorRetry(message: error!, onRetry: _load);
 
@@ -84,7 +85,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
                 const SizedBox(height: 6),
                 Text(_body(intro.first),
-                    style: const TextStyle(fontSize: 13, height: 1.5, color: Color(0xFFCFCFDA))),
+                    style: TextStyle(fontSize: 13, height: 1.5, color: c.onPanel)),
               ],
             ]),
           ),
@@ -100,7 +101,7 @@ class _HomeScreenState extends State<HomeScreen> {
               decoration: BoxDecoration(
                 color: Brand.surface,
                 borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: const Color(0xFF23232C)),
+                border: Border.all(color: c.border),
               ),
               child: Row(children: [
                 const GradientIconBadge(icon: Icons.play_circle_fill, size: 42),
@@ -174,7 +175,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           style: TextStyle(
                               fontSize: 13,
                               height: 1.5,
-                              color: isLight ? Brand.mutedLight : const Color(0xFFCFCFDA))),
+                              color: isLight ? Brand.mutedLight : c.onPanel)),
                     ]),
                   ),
                 ]),
@@ -223,7 +224,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       Align(
                         alignment: AlignmentDirectional.centerStart,
                         child: Text(_body(r),
-                            style: const TextStyle(fontSize: 13, height: 1.7, color: Color(0xFFCFCFDA))),
+                            style: TextStyle(fontSize: 13, height: 1.7, color: c.onPanel)),
                       ),
                     ],
                   ),

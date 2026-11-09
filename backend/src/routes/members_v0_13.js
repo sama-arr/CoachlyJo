@@ -283,6 +283,11 @@ router.get('/bookings', authenticate, requireRole('member'), async (req, res) =>
                 AND (x.cancelled_by='member' OR x.cancelled_by IS NULL)) AS pkg_cancels_used,
             cs.start_at, cs.delivery,
             CASE WHEN b.status='accepted' THEN cs.zoom_join_url END AS zoom_join_url,
+            -- (v0.15) True when the session is online and confirmed but the
+            -- meeting link has not been created yet, so the app can say
+            -- "link coming soon" instead of showing nothing at all.
+            (b.status='accepted' AND cs.delivery='online'
+             AND (cs.zoom_join_url IS NULL OR cs.zoom_join_url='')) AS link_pending,
             cp.first_name AS coach_first, cp.last_name AS coach_last,
             EXISTS (SELECT 1 FROM reviews r WHERE r.booking_id=b.id) AS reviewed
        FROM bookings b

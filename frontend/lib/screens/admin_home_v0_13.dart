@@ -524,6 +524,15 @@ class _StructureState extends State<_Structure> {
           trailing: const Icon(Icons.chevron_right),
           onTap: () => Navigator.push(context, fadeSlideRoute(const AdminContentScreen())),
         )),
+        // (v0.15) Integration health — makes a missing environment variable
+        // obvious instead of letting it fail silently, as ZOOM_HOST_USER did.
+        Card(child: ListTile(
+          leading: const GradientIconBadge(icon: Icons.monitor_heart_outlined, size: 32),
+          title: const Text('Integration health'),
+          subtitle: const Text('Zoom, email, push and schema status'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.push(context, fadeSlideRoute(const _IntegrationHealthScreen())),
+        )),
         // (v0.14 item 6) Contact details shown on the app's Contact Us screen.
         Card(child: ListTile(
           leading: const GradientIconBadge(icon: Icons.support_agent, size: 32),
@@ -648,6 +657,7 @@ class _CoachSummaryState extends State<_CoachSummary> {
   }
 
   Widget _body() {
+    final c = AppColors.of(context);
     final p = data!['profile'];
     final today = data!['today'];
     final reviews = (data!['reviews'] as List?) ?? [];
@@ -687,8 +697,8 @@ class _CoachSummaryState extends State<_CoachSummary> {
               '${m['revenue']} JOD · ${m['phone'] ?? ''}'),
           isThreeLine: true,
           trailing: m['has_active'] == true
-              ? const StatusPill(label: 'active', color: Color(0xFF3ED598))
-              : const StatusPill(label: 'past', color: Color(0xFF6E6E7A)),
+              ? StatusPill(label: 'active', color: c.success)
+              : StatusPill(label: 'past', color: c.faint),
           onTap: () => Navigator.push(context, MaterialPageRoute(
             builder: (_) => _MemberSummary(memberId: m['member_id']))),
         ),
@@ -792,6 +802,109 @@ class _MemberSummaryState extends State<_MemberSummary> {
   }
 }
 
+/// (v0.15) Integration health. The v0.14 Zoom outage was one missing
+/// environment variable that nothing surfaced; this screen reports what the
+/// running server actually has configured.
+class _IntegrationHealthScreen extends StatefulWidget {
+  const _IntegrationHealthScreen();
+  @override
+  State<_IntegrationHealthScreen> createState() => _IntegrationHealthScreenState();
+}
+
+class _IntegrationHealthScreenState extends State<_IntegrationHealthScreen> {
+  Map? data;
+  bool loading = true;
+  String? error;
+
+  @override
+  void initState() { super.initState(); _load(); }
+
+  Future<void> _load() async {
+    setState(() { loading = true; error = null; });
+    try {
+      data = Map<String, dynamic>.from(
+          await ApiClient.instance.get('/api/health/integrations'));
+    } on ApiException catch (e) { error = e.message; }
+    catch (_) { error = 'Cannot reach server.'; }
+    if (mounted) setState(() => loading = false);
+  }
+
+  Widget _tile(String name, bool ok, String detail, {String? warning}) {
+    final c = AppColors.of(context);
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+      child: ListTile(
+        leading: Icon(ok ? Icons.check_circle : Icons.error_outline,
+            color: ok ? c.success : c.danger, size: 26),
+        title: Text(name, style: const TextStyle(fontWeight: FontWeight.w700)),
+        subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(detail, style: TextStyle(fontSize: 12, color: c.muted)),
+          if (warning != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(warning, style: TextStyle(fontSize: 12, color: c.warning)),
+            ),
+        ]),
+        isThreeLine: warning != null,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = AppColors.of(context);
+    final zoom = (data?['zoom'] as Map?) ?? {};
+    final push = (data?['push'] as Map?) ?? {};
+    final schema = (data?['schema'] as Map?) ?? {};
+    final missing = (zoom['missing'] as List?) ?? [];
+    final noLink = zoom['sessionsWithoutLink'] ?? 0;
+    final devices = (push['devices'] as Map?) ?? {};
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Integration health')),
+      body: GlowBackground(
+        child: loading
+            ? const SkeletonList(count: 4)
+            : error != null
+                ? ErrorRetry(message: error!, onRetry: _load)
+                : RefreshIndicator(
+                    onRefresh: _load,
+                    child: ListView(padding: const EdgeInsets.only(bottom: 24), children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+                        child: Text('Environment: ${data?['environment'] ?? '—'}',
+                            style: TextStyle(fontSize: 12, color: c.muted)),
+                      ),
+                      _tile(
+                        'Zoom',
+                        zoom['configured'] == true,
+                        zoom['configured'] == true
+                            ? 'Meetings are created automatically.'
+                            : 'Missing: ${missing.join(', ')}',
+                        warning: noLink is int && noLink > 0
+                            ? '$noLink confirmed online session(s) have no meeting link.'
+                            : (zoom['placeholdersAllowed'] == true
+                                ? 'Placeholder links are enabled — never leave this on in production.'
+                                : null),
+                      ),
+                      _tile('Email (SMTP)', (data?['email'] as Map?)?['configured'] == true,
+                          (data?['email'] as Map?)?['configured'] == true
+                              ? 'Verification and reset emails are being sent.'
+                              : 'Not configured — codes appear in the server log only.'),
+                      _tile('Push notifications', push['configured'] == true,
+                          push['configured'] == true
+                              ? 'Registered devices — android: ${devices['android'] ?? 0}, ios: ${devices['ios'] ?? 0}'
+                              : 'Firebase credentials not set; notifications stay in-app.'),
+                      _tile('Database schema', schema['upToDate'] == true,
+                          'Database v${schema['current'] ?? '?'} · app expects v${schema['expected'] ?? '?'}',
+                          warning: schema['upToDate'] == true ? null : 'Run: npm run migrate'),
+                    ]),
+                  ),
+      ),
+    );
+  }
+}
+
 /// (v0.14 item 6) Admin editor for the Contact Us details. The phone number
 /// and Instagram handle can be filled in later without an app release.
 class _ContactSettingsScreen extends StatefulWidget {
@@ -849,6 +962,7 @@ class _ContactSettingsScreenState extends State<_ContactSettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final c = AppColors.of(context);
     return Scaffold(
       appBar: AppBar(title: const Text('Contact details')),
       body: GlowBackground(
@@ -857,10 +971,10 @@ class _ContactSettingsScreenState extends State<_ContactSettingsScreen> {
             : error != null
                 ? ErrorRetry(message: error!, onRetry: _load)
                 : ListView(padding: const EdgeInsets.all(16), children: [
-                    const Text(
+                    Text(
                       'These appear on the Contact us screen in the app. Leave a field '
                       'empty to hide that row.',
-                      style: TextStyle(fontSize: 12, color: Color(0xFF9A9AA6)),
+                      style: TextStyle(fontSize: 12, color: c.muted),
                     ),
                     const SizedBox(height: 16),
                     TextField(
@@ -970,6 +1084,7 @@ class _DeletionRequestsScreenState extends State<_DeletionRequestsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final c = AppColors.of(context);
     final df = DateFormat('d MMM yyyy, h:mm a');
     return Scaffold(
       appBar: AppBar(title: const Text('Deletion requests')),
@@ -1009,20 +1124,20 @@ class _DeletionRequestsScreenState extends State<_DeletionRequestsScreen> {
                                     Text(matched ? 'Matches an active ${r['matched_role']} account' : 'No active account with this email',
                                         style: const TextStyle(fontSize: 12)),
                                     if ('${r['note'] ?? ''}'.isNotEmpty)
-                                      Text('${r['note']}', style: const TextStyle(fontSize: 11, color: Color(0xFF9A9AA6))),
+                                      Text('${r['note']}', style: TextStyle(fontSize: 11, color: c.muted)),
                                     Text(df.format(DateTime.parse(r['created_at']).toLocal()),
-                                        style: const TextStyle(fontSize: 10, color: Color(0xFF6E6E7A))),
+                                        style: TextStyle(fontSize: 10, color: c.faint)),
                                   ]),
                                   isThreeLine: true,
                                   trailing: status != 'open' ? null : Wrap(children: [
                                     IconButton(
                                       tooltip: 'Complete',
-                                      icon: const Icon(Icons.check, color: Color(0xFF3ED598)),
+                                      icon: Icon(Icons.check, color: c.success),
                                       onPressed: () => _act(r, true),
                                     ),
                                     IconButton(
                                       tooltip: 'Reject',
-                                      icon: const Icon(Icons.close, color: Color(0xFFFF5470)),
+                                      icon: Icon(Icons.close, color: c.danger),
                                       onPressed: () => _act(r, false),
                                     ),
                                   ]),
@@ -1076,6 +1191,7 @@ class _PenaltiesScreenState extends State<_PenaltiesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final c = AppColors.of(context);
     final df = DateFormat('d MMM yyyy, h:mm a');
     return Scaffold(
       appBar: AppBar(title: const Text('Coach penalties')),
@@ -1116,12 +1232,12 @@ class _PenaltiesScreenState extends State<_PenaltiesScreen> {
                                       if (p['session_at'] != null)
                                         Text('Session: ${df.format(DateTime.parse(p['session_at']).toLocal())}'
                                             '${p['member_first'] != null ? ' · ${p['member_first']} ${p['member_last']}' : ''}',
-                                            style: const TextStyle(fontSize: 11, color: Color(0xFF9A9AA6))),
+                                            style: TextStyle(fontSize: 11, color: c.muted)),
                                     ]),
                                     isThreeLine: true,
                                     trailing: p['settled_at'] == null
                                         ? TextButton(onPressed: () => _settle(p), child: const Text('Settle'))
-                                        : const StatusPill(label: 'settled', color: Color(0xFF6E6E7A)),
+                                        : StatusPill(label: 'settled', color: c.faint),
                                   ),
                                 ),
                               );
@@ -1293,6 +1409,7 @@ class _PackagesAdminState extends State<_PackagesAdmin> {
 
   @override
   Widget build(BuildContext context) {
+    final c = AppColors.of(context);
     return Scaffold(
       appBar: AppBar(title: const Text('Packages')),
       floatingActionButton: FloatingActionButton.extended(onPressed: _create, icon: const Icon(Icons.add), label: const Text('New package')),
@@ -1312,7 +1429,7 @@ class _PackagesAdminState extends State<_PackagesAdmin> {
                     leading: Icon(p['mode'] == 'online' ? Icons.videocam : Icons.place),
                     title: Row(children: [
                       Expanded(child: Text('${p['name_en']}')),
-                      if (archived) const StatusPill(label: 'archived', color: Color(0xFF6E6E7A))
+                      if (archived) StatusPill(label: 'archived', color: c.faint)
                       else if (p['is_active'] != true) const StatusPill(label: 'inactive', color: Brand.orange),
                     ]),
                     subtitle: Text('${p['class_count']} ${p['class_count'] == 1 ? "session" : "classes"} · '

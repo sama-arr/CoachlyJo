@@ -210,6 +210,57 @@ router.post(
   }
 );
 
+// (v0.15) Retry automatic Zoom creation for a booking whose link is missing —
+// used after fixing configuration, so a coach does not have to cancel and
+// rebook to get a working link.
+router.post('/:id/retry-meeting-link', authenticate, requireRole('coach'), async (req, res) => {
+  const r = await pool.query(
+    `SELECT cs.id AS session_id, cs.start_at, cs.end_at, cs.delivery, cs.zoom_join_url,
+            b.member_id, cp.first_name, cp.last_name
+       FROM bookings b
+       JOIN coach_sessions cs ON cs.id = b.session_id
+       JOIN coach_profiles cp ON cp.user_id = cs.coach_id
+      WHERE b.id = $1 AND cs.coach_id = $2 AND b.status = 'accepted'`,
+    [req.params.id, req.user.id]);
+  if (r.rowCount === 0) return res.status(404).json({ error: 'Accepted booking not found' });
+  const row = r.rows[0];
+  if (row.delivery !== 'online')
+    return res.status(409).json({ error: 'This is an in-person session' });
+  if (row.zoom_join_url)
+    return res.status(409).json({ error: 'This session already has a link' });
+
+  const durationMinutes = Math.max(
+    15, Math.round((new Date(row.end_at) - new Date(row.start_at)) / 60000));
+  try {
+    const link = await generateZoomLink(row.session_id, {
+      topic: `CoachlyJo session with ${row.first_name} ${row.last_name}`,
+      startAt: row.start_at,
+      durationMinutes,
+    });
+    await pool.query(
+      `UPDATE coach_sessions SET zoom_meeting_id=$2, zoom_join_url=$3, zoom_start_url=$4
+        WHERE id=$1`,
+      [row.session_id, link.meetingId, link.joinUrl, link.startUrl]);
+    await notify({
+      userId: row.member_id,
+      type: 'zoom_link',
+      titleEn: 'Your session link is ready',
+      titleAr: 'رابط جلستك جاهز',
+      bodyEn: 'The meeting link for your upcoming session is now available.',
+      bodyAr: 'أصبح رابط الاجتماع لجلستك القادمة متاحاً.',
+      relatedId: req.params.id,
+      email: true,
+    });
+    res.json({ created: true, joinUrl: link.joinUrl, placeholder: link.placeholder === true });
+  } catch (err) {
+    // Surface the real reason so the coach knows to paste a link instead.
+    res.status(502).json({
+      error: 'Zoom could not create the meeting. Add your own link instead, and tell CoachlyJo support.',
+      detail: err.message,
+    });
+  }
+});
+
 // (v0.14) Coach supplies their own meeting link when automatic creation failed,
 // or wants to use Google Meet / their personal Zoom room instead.
 router.put('/:id/meeting-link', authenticate, requireRole('coach'), async (req, res) => {

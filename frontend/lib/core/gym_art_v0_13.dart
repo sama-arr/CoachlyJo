@@ -213,6 +213,7 @@ class GymBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = AppColors.of(context);
     final light = Theme.of(context).brightness == Brightness.light;
     return Container(
       width: double.infinity,
@@ -253,7 +254,7 @@ class GymBanner extends StatelessWidget {
                   style: TextStyle(
                       fontSize: 13,
                       height: 1.5,
-                      color: light ? Brand.mutedLight : const Color(0xFFCFCFDA))),
+                      color: light ? Brand.mutedLight : c.onPanel)),
             ],
           ]),
         ),

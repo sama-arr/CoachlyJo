@@ -55,3 +55,16 @@ services:
         sync: false
       - key: ZOOM_CLIENT_SECRET
         sync: false
+      # (v0.15) MISSING UNTIL NOW — hasCreds() requires all four Zoom values.
+      # Without it Zoom was considered unconfigured, meeting creation failed and
+      # bookings were accepted with no link. Set it to the Zoom account email
+      # meetings are hosted under, e.g. coachlyapp@hotmail.com
+      - key: ZOOM_HOST_USER
+        sync: false
+      # Push notifications (optional until Firebase is configured).
+      - key: FIREBASE_PROJECT_ID
+        sync: false
+      - key: FIREBASE_CLIENT_EMAIL
+        sync: false
+      - key: FIREBASE_PRIVATE_KEY
+        sync: false

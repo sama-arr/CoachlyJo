@@ -258,6 +258,7 @@ class _RequestsTabState extends State<_RequestsTab> {
   }
 
   Future<void> _decide(Map b, bool accept) async {
+    final c = AppColors.of(context);
     String? reason;
     if (!accept) {
       final c = TextEditingController();
@@ -293,7 +294,63 @@ class _RequestsTabState extends State<_RequestsTab> {
   // (v0.10 item 2) Coach cancels a session. The member always keeps their
   // class; cancelling on the same day costs the coach one session (recorded
   // for the admin to settle).
+  /// (v0.15 bug 4) Ask the server to create the Zoom meeting again — used
+  /// after a configuration fix, so nobody has to cancel and rebook.
+  Future<void> _retryLink(Map b) async {
+    try {
+      await ApiClient.instance.post('/api/bookings/${b['id']}/retry-meeting-link');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(tr(context, 'Meeting link created.'))));
+      }
+      _load();
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
+  /// Paste a personal Zoom / Google Meet link instead.
+  Future<void> _addOwnLink(Map b) async {
+    final ctrl = TextEditingController();
+    final url = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(tr(ctx, 'Add a meeting link')),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text(tr(ctx, 'Paste your Zoom or Google Meet link. The member is notified straight away.'),
+              style: const TextStyle(fontSize: 12)),
+          const SizedBox(height: 10),
+          TextField(
+            controller: ctrl,
+            autofocus: true,
+            keyboardType: TextInputType.url,
+            decoration: const InputDecoration(hintText: 'https://…'),
+          ),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(tr(ctx, 'Cancel'))),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
+            child: Text(tr(ctx, 'Save')),
+          ),
+        ],
+      ),
+    );
+    if (url == null || url.isEmpty) return;
+    try {
+      await ApiClient.instance.put('/api/bookings/${b['id']}/meeting-link', {'joinUrl': url});
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(tr(context, 'Link saved and the member was notified.'))));
+      }
+      _load();
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
   Future<void> _coachCancel(Map b) async {
+    final c = AppColors.of(context);
     final start = DateTime.tryParse(b['start_at'] ?? '')?.toLocal();
     final now = DateTime.now();
     final sameDay = start != null &&
@@ -318,8 +375,8 @@ class _RequestsTabState extends State<_RequestsTab> {
                 style: TextStyle(
                     fontSize: 12,
                     color: sameDay
-                        ? const Color(0xFFFFC542)
-                        : const Color(0xFF9A9AA6)),
+                        ? c.warning
+                        : c.muted),
               ),
               const SizedBox(height: 10),
               TextField(
@@ -402,6 +459,7 @@ class _RequestsTabState extends State<_RequestsTab> {
 
   @override
   Widget build(BuildContext context) {
+    final c = AppColors.of(context);
     if (loading) return const SkeletonList(count: 3);
     if (error != null) return ErrorRetry(message: error!, onRetry: _load);
     if (bookings.isEmpty) {
@@ -426,7 +484,7 @@ class _RequestsTabState extends State<_RequestsTab> {
             final b = entry.value;
             final status = b['status'];
             final edge =
-                status == 'pending' ? Brand.orange : const Color(0xFF3ED598);
+                status == 'pending' ? Brand.orange : c.success;
             return FadeInUp(
                 index: entry.key,
                 child: BrandCard(
@@ -480,12 +538,38 @@ class _RequestsTabState extends State<_RequestsTab> {
                               LinkText(
                                   url: b['zoom_join_url'],
                                   label: tr(context, 'Join Zoom session')),
+                            // (v0.15 bug 4) Confirmed online session with no
+                            // link yet: retry creation, or paste your own.
+                            if (b['link_pending'] == true)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Wrap(spacing: 10, children: [
+                                  Text(tr(context, 'No meeting link yet'),
+                                      style: TextStyle(fontSize: 11, color: c.warning)),
+                                  InkWell(
+                                    onTap: () => _retryLink(b),
+                                    child: Text(tr(context, 'Retry'),
+                                        style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w700,
+                                            color: Theme.of(context).colorScheme.primary)),
+                                  ),
+                                  InkWell(
+                                    onTap: () => _addOwnLink(b),
+                                    child: Text(tr(context, 'Add my link'),
+                                        style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w700,
+                                            color: Theme.of(context).colorScheme.primary)),
+                                  ),
+                                ]),
+                              ),
                           ]),
                       trailing: status == 'pending'
                           ? Wrap(spacing: 4, children: [
                               IconButton(
-                                  icon: const Icon(Icons.check,
-                                      color: Color(0xFF3ED598)),
+                                  icon: Icon(Icons.check,
+                                      color: c.success),
                                   onPressed: () => _decide(b, true)),
                               // (v0.10 item 2) 3 rejections per package; after that the coach
                               // must accept or cancel with a reason.
@@ -494,15 +578,15 @@ class _RequestsTabState extends State<_RequestsTab> {
                                       0) <
                                   3)
                                 IconButton(
-                                    icon: const Icon(Icons.close,
-                                        color: Color(0xFFFF5470)),
+                                    icon: Icon(Icons.close,
+                                        color: c.danger),
                                     onPressed: () => _decide(b, false))
                               else
                                 IconButton(
                                   tooltip: tr(context,
                                       'Rejection limit reached — cancel instead'),
-                                  icon: const Icon(Icons.event_busy,
-                                      color: Color(0xFFFF5470)),
+                                  icon: Icon(Icons.event_busy,
+                                      color: c.danger),
                                   onPressed: () => _coachCancel(b),
                                 ),
                             ])
@@ -516,8 +600,8 @@ class _RequestsTabState extends State<_RequestsTab> {
                                   Tooltip(
                                     message: tr(context,
                                         'Available after the session ends'),
-                                    child: const Icon(Icons.lock_clock,
-                                        size: 20, color: Color(0xFF6E6E7A)),
+                                    child: Icon(Icons.lock_clock,
+                                        size: 20, color: c.faint),
                                   ),
                                   IconButton(
                                     tooltip: tr(context, 'Cancel session'),
@@ -980,6 +1064,7 @@ class _AvailabilityTabState extends State<_AvailabilityTab> {
 
   @override
   Widget build(BuildContext context) {
+    final c = AppColors.of(context);
     if (loading) return const SkeletonList(count: 4);
     if (error != null) return ErrorRetry(message: error!, onRetry: _load);
 
@@ -1014,8 +1099,8 @@ class _AvailabilityTabState extends State<_AvailabilityTab> {
                       fontWeight: FontWeight.w800, fontSize: 15),
                 ),
                 Text(tr(context, 'Tap an hour to open or close it'),
-                    style: const TextStyle(
-                        fontSize: 11, color: Color(0xFF9A9AA6))),
+                    style: TextStyle(
+                        fontSize: 11, color: c.muted)),
               ]),
             ),
             IconButton(
@@ -1075,7 +1160,7 @@ class _AvailabilityTabState extends State<_AvailabilityTab> {
                               fontSize: 10,
                               fontWeight: FontWeight.w700,
                               color: d['isPast'] == true
-                                  ? const Color(0xFF6E6E7A)
+                                  ? c.faint
                                   : Theme.of(context).colorScheme.onSurface)),
                       Container(
                         width: 22,
@@ -1094,7 +1179,7 @@ class _AvailabilityTabState extends State<_AvailabilityTab> {
                                 color: isToday
                                     ? Colors.white
                                     : (d['isPast'] == true
-                                        ? const Color(0xFF6E6E7A)
+                                        ? c.faint
                                         : Theme.of(context)
                                             .colorScheme
                                             .onSurface))),
@@ -1112,8 +1197,8 @@ class _AvailabilityTabState extends State<_AvailabilityTab> {
                     width: 38,
                     child: Text(
                       '${hour.toString().padLeft(2, '0')}:00',
-                      style: const TextStyle(
-                          fontSize: 9, color: Color(0xFF9A9AA6)),
+                      style: TextStyle(
+                          fontSize: 9, color: c.muted),
                     ),
                   ),
                   ..._days.map((d) => Expanded(child: _cell(d, hour, light))),
@@ -1129,7 +1214,7 @@ class _AvailabilityTabState extends State<_AvailabilityTab> {
           child: Wrap(spacing: 14, runSpacing: 6, children: [
             _legend(Brand.magenta, tr(context, 'Online')),
             _legend(Brand.orange, tr(context, 'In-person')),
-            _legend(const Color(0xFF3ED598), tr(context, 'Booked')),
+            _legend(c.success, tr(context, 'Booked')),
           ]),
         ),
         Padding(
@@ -1137,7 +1222,7 @@ class _AvailabilityTabState extends State<_AvailabilityTab> {
           child: Text(
             tr(context,
                 'Long-press a block to switch it between online and in-person. Booked hours are locked.'),
-            style: const TextStyle(fontSize: 11, color: Color(0xFF9A9AA6)),
+            style: TextStyle(fontSize: 11, color: c.muted),
           ),
         ),
         const SizedBox(height: 8),
@@ -1167,6 +1252,7 @@ class _AvailabilityTabState extends State<_AvailabilityTab> {
       ]);
 
   Widget _cell(Map day, int hour, bool light) {
+    final c = AppColors.of(context);
     final date = '${day['date']}';
     final past = day['isPast'] == true;
     final block = _blockAt(day, hour);
@@ -1177,7 +1263,7 @@ class _AvailabilityTabState extends State<_AvailabilityTab> {
     if (past) {
       bg = light ? const Color(0xFFF1EFF4) : const Color(0xFF121218);
     } else if (booked) {
-      bg = const Color(0xFF3ED598).withValues(alpha: light ? 0.30 : 0.38);
+      bg = c.success.withValues(alpha: light ? 0.30 : 0.38);
     } else if (block != null) {
       bg = (online ? Brand.magenta : Brand.orange)
           .withValues(alpha: light ? 0.28 : 0.42);
@@ -1196,12 +1282,12 @@ class _AvailabilityTabState extends State<_AvailabilityTab> {
           color: bg,
           borderRadius: BorderRadius.circular(3),
           border: Border.all(
-            color: light ? const Color(0xFFE6E3EC) : const Color(0xFF23232C),
+            color: light ? const Color(0xFFE6E3EC) : c.border,
             width: 0.5,
           ),
         ),
         child: booked
-            ? const Icon(Icons.lock, size: 10, color: Color(0xFF0A5A3C))
+            ? Icon(Icons.lock, size: 10, color: c.success)
             : null,
       ),
     );
@@ -1244,6 +1330,7 @@ class _ClientsTabState extends State<_ClientsTab> {
 
   @override
   Widget build(BuildContext context) {
+    final c = AppColors.of(context);
     final df = DateFormat('d MMM, h:mm a');
     final visible = rows
         .where((r) => (r['is_completed'] == true) == showCompleted)
@@ -1284,8 +1371,8 @@ class _ClientsTabState extends State<_ClientsTab> {
                               final total = r['classes_total'];
                               return BrandCard(
                                 accent: r['is_completed'] == true
-                                    ? const Color(0xFF6E6E7A)
-                                    : const Color(0xFF3ED598),
+                                    ? c.faint
+                                    : c.success,
                                 onTap: () => Navigator.push(
                                     context,
                                     fadeSlideRoute(
@@ -1400,6 +1487,7 @@ class _DashboardTabState extends State<_DashboardTab> {
 
   @override
   Widget build(BuildContext context) {
+    final c = AppColors.of(context);
     if (loading) return const SkeletonList(count: 3);
     if (error != null) return ErrorRetry(message: error!, onRetry: _load);
     final d = data!;
@@ -1452,7 +1540,7 @@ class _DashboardTabState extends State<_DashboardTab> {
               label: 'Completed (last ${d['days']}d)',
               value: '${d['completed']}',
               icon: Icons.check_circle,
-              color: const Color(0xFF3ED598)),
+              color: c.success),
           StatCard(
               label: 'Active clients',
               value: '${d['activeClients']}',
@@ -1468,15 +1556,15 @@ class _DashboardTabState extends State<_DashboardTab> {
               label: 'Rating',
               value: '⭐ ${d['avgRating']} (${d['ratingCount']})',
               icon: Icons.star,
-              color: const Color(0xFFFFC542)),
+              color: c.warning),
           // (v0.10) Sessions owed from same-day cancellations.
           StatCard(
             label: tr(context, 'Sessions owed'),
             value: '${d['penaltySessions'] ?? 0}',
             icon: Icons.gavel,
             color: (int.tryParse('${d['penaltySessions'] ?? 0}') ?? 0) > 0
-                ? const Color(0xFFFF5470)
-                : const Color(0xFF6E6E7A),
+                ? c.danger
+                : c.faint,
           ),
         ]),
         const SizedBox(height: 8),

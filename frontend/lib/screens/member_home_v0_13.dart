@@ -28,14 +28,18 @@ class _MemberHomeState extends State<MemberHome> {
   bool? _profileComplete;
 
   @override
-  void initState() { super.initState(); _checkProfile(); }
+  void initState() {
+    super.initState();
+    _checkProfile();
+  }
 
   Future<void> _checkProfile() async {
     try {
       final st = await ApiClient.instance.get('/api/profile/status');
       if (mounted) setState(() => _profileComplete = st['complete'] == true);
     } catch (_) {
-      if (mounted) setState(() => _profileComplete = true);  // never lock on a network blip
+      if (mounted)
+        setState(() => _profileComplete = true); // never lock on a network blip
     }
   }
 
@@ -46,9 +50,14 @@ class _MemberHomeState extends State<MemberHome> {
     final pages = [
       const HomeScreen(audience: 'member'),
       if (needsProfile)
-        CompleteProfileScreen(role: 'member', onCompleted: () {
-          setState(() { _profileComplete = true; _tab = 0; });
-        }),
+        CompleteProfileScreen(
+            role: 'member',
+            onCompleted: () {
+              setState(() {
+                _profileComplete = true;
+                _tab = 0;
+              });
+            }),
       const _CoachesTab(),
       const _PackagesTab(),
       const _BookingsTab()
@@ -441,6 +450,7 @@ class _CoachesTabState extends State<_CoachesTab> {
 
   @override
   Widget build(BuildContext context) {
+    final c = AppColors.of(context);
     if (loading) return const SkeletonList();
     if (error != null) return ErrorRetry(message: error!, onRetry: _load);
     if (coaches.isEmpty) {
@@ -479,8 +489,7 @@ class _CoachesTabState extends State<_CoachesTab> {
                                     fontWeight: FontWeight.w700, fontSize: 15)),
                             const SizedBox(height: 2),
                             Text('${c['nationality']}',
-                                style: const TextStyle(
-                                    fontSize: 12, color: Color(0xFF9A9AA6))),
+                                style: TextStyle(fontSize: 12, color: c.muted)),
                             const SizedBox(height: 6),
                             Row(children: [
                               const Icon(Icons.star_rounded,
@@ -491,12 +500,12 @@ class _CoachesTabState extends State<_CoachesTab> {
                                       fontSize: 12,
                                       fontWeight: FontWeight.w600)),
                               Text('  (${c['rating_count']})',
-                                  style: const TextStyle(
-                                      fontSize: 11, color: Color(0xFF9A9AA6))),
+                                  style:
+                                      TextStyle(fontSize: 11, color: c.muted)),
                             ]),
                           ]),
                     ),
-                    const Icon(Icons.chevron_right, color: Color(0xFF6E6E7A)),
+                    Icon(Icons.chevron_right, color: c.faint),
                   ]),
                 ),
               ));
@@ -845,12 +854,13 @@ class _PackagesTabState extends State<_PackagesTab> {
   }
 
   Widget _packageCard(Map p, {bool isPast = false}) {
+    final c = AppColors.of(context);
     final rejected = p['payment_rejection_reason'] != null;
     final coachName = p['coach_first'] != null
         ? '${p['coach_first']} ${p['coach_last']}'
         : '—';
     final edge = isPast
-        ? const Color(0xFF3A3A46)
+        ? c.outline
         : p['status'] == 'active'
             ? Colors.green
             : Brand.orange;
@@ -875,7 +885,7 @@ class _PackagesTabState extends State<_PackagesTab> {
               used: int.tryParse('${p['classes_consumed'] ?? 0}') ?? 0,
               total: int.tryParse('${p['classes_total'] ?? 0}') ?? 0,
               size: 54,
-              color: isPast ? const Color(0xFF6E6E7A) : null,
+              color: isPast ? c.faint : null,
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -886,8 +896,7 @@ class _PackagesTabState extends State<_PackagesTab> {
                         '${p['classes_consumed']} / ${p['classes_total']} ${tr(context, 'used')}',
                         style: const TextStyle(fontSize: 12)),
                     Text('${tr(context, 'Pending')}: ${p['pending']}',
-                        style: const TextStyle(
-                            fontSize: 12, color: Color(0xFF9A9AA6))),
+                        style: TextStyle(fontSize: 12, color: c.muted)),
                   ]),
             ),
           ]),
@@ -934,10 +943,11 @@ class _PackagesTabState extends State<_PackagesTab> {
   }
 
   Widget _statusPill(String s) {
+    final c = AppColors.of(context);
     final color = s == 'active'
-        ? const Color(0xFF3ED598)
+        ? c.success
         : (s == 'expired' || s == 'cancelled')
-            ? const Color(0xFFFF5470)
+            ? c.danger
             : Brand.orange;
     return StatusPill(label: trStatus(context, s), color: color);
   }
@@ -993,6 +1003,7 @@ class _BookingsTabState extends State<_BookingsTab> {
   }
 
   Future<void> _cancel(Map b) async {
+    final c = AppColors.of(context);
     // (v0.10 item 2) Published policy: cancelling more than 24h ahead is free,
     // inside 24h deducts the class, and a member gets 3 cancellations per
     // package. The 4th is blocked here and on the server.
@@ -1034,8 +1045,7 @@ class _BookingsTabState extends State<_BookingsTab> {
                       'This session is more than 24 hours away, so no class will be deducted.')),
               const SizedBox(height: 10),
               Text('${left - 1} ${tr(ctx, 'cancellations left')}',
-                  style:
-                      const TextStyle(fontSize: 12, color: Color(0xFF9A9AA6))),
+                  style: TextStyle(fontSize: 12, color: c.muted)),
             ]),
         actions: [
           TextButton(
@@ -1162,6 +1172,7 @@ class _BookingsTabState extends State<_BookingsTab> {
   }
 
   Widget _bookingCard(Map b) {
+    final c = AppColors.of(context);
     final status = b['status'];
     final noShow = b['completion_kind'] == 'no_show';
     final edge = status == 'accepted'
@@ -1170,7 +1181,7 @@ class _BookingsTabState extends State<_BookingsTab> {
             ? Brand.orange
             : status == 'completed'
                 ? (noShow ? Colors.redAccent : Brand.magenta)
-                : const Color(0xFF3A3A46);
+                : c.outline;
     return StatusEdgeCard(
         color: edge,
         child: ListTile(

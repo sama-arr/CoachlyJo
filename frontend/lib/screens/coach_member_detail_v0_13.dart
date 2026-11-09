@@ -13,25 +13,37 @@ import '../core/i18n_v0_13.dart';
 class CoachMemberDetail extends StatefulWidget {
   final String memberId;
   final String memberName;
-  const CoachMemberDetail({super.key, required this.memberId, required this.memberName});
+  const CoachMemberDetail(
+      {super.key, required this.memberId, required this.memberName});
   @override
   State<CoachMemberDetail> createState() => _CoachMemberDetailState();
 }
 
 class _CoachMemberDetailState extends State<CoachMemberDetail> {
+  AppColors get c => AppColors.of(context);
   Map? data;
   bool loading = true;
   String? error;
 
   @override
-  void initState() { super.initState(); _load(); }
+  void initState() {
+    super.initState();
+    _load();
+  }
 
   Future<void> _load() async {
-    setState(() { loading = true; error = null; });
+    setState(() {
+      loading = true;
+      error = null;
+    });
     try {
-      data = await ApiClient.instance.get('/api/coaches/members/${widget.memberId}');
-    } on ApiException catch (e) { error = e.message; }
-    catch (_) { error = 'Cannot reach server.'; }
+      data = await ApiClient.instance
+          .get('/api/coaches/members/${widget.memberId}');
+    } on ApiException catch (e) {
+      error = e.message;
+    } catch (_) {
+      error = 'Cannot reach server.';
+    }
     if (mounted) setState(() => loading = false);
   }
 
@@ -50,6 +62,7 @@ class _CoachMemberDetailState extends State<CoachMemberDetail> {
   }
 
   Widget _content() {
+    final c = AppColors.of(context);
     final p = data!['profile'] as Map;
     final q = data!['questionnaire'] as Map;
     final answers = (q['answers'] as List?) ?? [];
@@ -70,16 +83,21 @@ class _CoachMemberDetailState extends State<CoachMemberDetail> {
           margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           child: Padding(
             padding: const EdgeInsets.all(14),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
                 const GradientIconBadge(icon: Icons.contact_phone, size: 30),
                 const SizedBox(width: 10),
-                Text(tr(context, 'Contact'), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                Text(tr(context, 'Contact'),
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w700, fontSize: 15)),
               ]),
               const SizedBox(height: 10),
               if (p['phone'] != null) _row(Icons.phone, '${p['phone']}'),
-              if (p['email'] != null) _row(Icons.email_outlined, '${p['email']}'),
-              if (p['nationality'] != null) _row(Icons.flag_outlined, '${p['nationality']}'),
+              if (p['email'] != null)
+                _row(Icons.email_outlined, '${p['email']}'),
+              if (p['nationality'] != null)
+                _row(Icons.flag_outlined, '${p['nationality']}'),
             ]),
           ),
         ),
@@ -89,33 +107,44 @@ class _CoachMemberDetailState extends State<CoachMemberDetail> {
           margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           child: Padding(
             padding: const EdgeInsets.all(14),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
-                const GradientIconBadge(icon: Icons.assignment_outlined, size: 30),
+                const GradientIconBadge(
+                    icon: Icons.assignment_outlined, size: 30),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(tr(context, 'Fitness questionnaire'),
-                      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w700, fontSize: 15)),
                 ),
               ]),
               const SizedBox(height: 4),
               const GradientRule(width: 40),
               const SizedBox(height: 10),
               if (answers.isEmpty)
-                Text(tr(context, 'This member has not filled the questionnaire.'),
-                    style: const TextStyle(fontSize: 12, color: Color(0xFF9A9AA6)))
+                Text(
+                    tr(context,
+                        'This member has not filled the questionnaire.'),
+                    style: TextStyle(fontSize: 12, color: c.muted))
               else
                 ...answers.map<Widget>((a) {
-                  final label = isAr && (a['labelAr'] ?? '').toString().trim().isNotEmpty
-                      ? a['labelAr'].toString()
-                      : a['labelEn'].toString();
+                  final label =
+                      isAr && (a['labelAr'] ?? '').toString().trim().isNotEmpty
+                          ? a['labelAr'].toString()
+                          : a['labelEn'].toString();
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 10),
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(label, style: const TextStyle(fontSize: 11, color: Color(0xFF9A9AA6))),
-                      const SizedBox(height: 2),
-                      Text('${a['answer']}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-                    ]),
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(label,
+                              style: TextStyle(fontSize: 11, color: c.muted)),
+                          const SizedBox(height: 2),
+                          Text('${a['answer']}',
+                              style: const TextStyle(
+                                  fontSize: 14, fontWeight: FontWeight.w600)),
+                        ]),
                   );
                 }),
             ]),
@@ -127,32 +156,46 @@ class _CoachMemberDetailState extends State<CoachMemberDetail> {
           margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           child: Padding(
             padding: const EdgeInsets.all(14),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
                 const GradientIconBadge(icon: Icons.card_membership, size: 30),
                 const SizedBox(width: 10),
-                Text(tr(context, 'Packages'), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                Text(tr(context, 'Packages'),
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w700, fontSize: 15)),
               ]),
               const SizedBox(height: 10),
               if (packages.isEmpty)
-                Text(tr(context, 'No packages yet.'), style: const TextStyle(fontSize: 12, color: Color(0xFF9A9AA6)))
+                Text(tr(context, 'No packages yet.'),
+                    style: TextStyle(fontSize: 12, color: c.muted))
               else
                 ...packages.map<Widget>((pk) {
-                  final done = (pk['classes_consumed'] ?? 0) >= (pk['classes_total'] ?? 0);
+                  final done = (pk['classes_consumed'] ?? 0) >=
+                      (pk['classes_total'] ?? 0);
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 8),
                     child: Row(children: [
                       Expanded(
-                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Text(pkgName(context, pk), style: const TextStyle(fontWeight: FontWeight.w600)),
-                          Text('${pk['classes_consumed']} / ${pk['classes_total']} ${tr(context, 'used')}',
-                              style: const TextStyle(fontSize: 11, color: Color(0xFF9A9AA6))),
-                        ]),
+                        child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(pkgName(context, pk),
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w600)),
+                              Text(
+                                  '${pk['classes_consumed']} / ${pk['classes_total']} ${tr(context, 'used')}',
+                                  style:
+                                      TextStyle(fontSize: 11, color: c.muted)),
+                            ]),
                       ),
                       StatusPill(
                         label: trStatus(context, pk['status']),
-                        color: done ? const Color(0xFF6E6E7A)
-                            : pk['status'] == 'active' ? const Color(0xFF3ED598) : Brand.orange,
+                        color: done
+                            ? c.faint
+                            : pk['status'] == 'active'
+                                ? c.success
+                                : Brand.orange,
                       ),
                     ]),
                   );
@@ -167,7 +210,7 @@ class _CoachMemberDetailState extends State<CoachMemberDetail> {
   Widget _row(IconData icon, String text) => Padding(
         padding: const EdgeInsets.only(bottom: 6),
         child: Row(children: [
-          Icon(icon, size: 16, color: const Color(0xFF9A9AA6)),
+          Icon(icon, size: 16, color: c.muted),
           const SizedBox(width: 8),
           Expanded(child: Text(text, style: const TextStyle(fontSize: 13))),
         ]),

@@ -187,6 +187,49 @@ for path in files:
             line = src[:m.start()].count('\n') + 1
             errors.append(f'{path}:{line}: private method {name} is never used')
 
+
+# 10. (v0.15) Semantic colours: `c.muted` and friends are runtime values, so
+# they cannot appear inside a const constructor, and the enclosing method must
+# declare `final c = AppColors.of(context);`. Both mistakes compile-fail.
+SEM = r'\bc\.(muted|faint|onPanel|border|outline|success|warning|danger|info|neutral|surfaceHigh|statusFill|statusBorder|text)\b'
+for path in files:
+    src = open(path).read()
+    if not re.search(SEM, src):
+        continue
+    # const contexts holding a semantic colour
+    for m in re.finditer(r'const\s+(?=[A-Z_])', src):
+        paren = src.find('(', m.start())
+        if paren == -1:
+            continue
+        depth, i = 0, paren
+        while i < len(src):
+            if src[i] == '(':
+                depth += 1
+            elif src[i] == ')':
+                depth -= 1
+                if depth == 0:
+                    break
+            i += 1
+        if re.search(SEM, src[m.start():i + 1]):
+            line = src[:m.start()].count('\n') + 1
+            errors.append(f'{path}:{line}: const constructor contains a runtime colour (will not compile)')
+    # methods using colours without declaring them
+    for m in re.finditer(r'\n  (?:@override\n  )?(?:static )?(?:Future<[^>]*>|void|Widget|String|int|bool|double|Color|List<Widget>)\s+(\w+)\s*\([^;{]*\)\s*(?:async\s*)?\{', src):
+        start = src.index('{', m.end() - 1) if src[m.end() - 1] != '{' else m.end() - 1
+        depth, j = 0, start
+        while j < len(src):
+            if src[j] == '{':
+                depth += 1
+            elif src[j] == '}':
+                depth -= 1
+                if depth == 0:
+                    break
+            j += 1
+        body = src[start:j]
+        if re.search(SEM, body) and 'AppColors.of(' not in body:
+            line = src[:m.start()].count('\n') + 1
+            errors.append(f'{path}:{line}: {m.group(1)}() uses semantic colours without `final c = AppColors.of(context);`')
+
 # 9. frontend API paths exist in the backend
 backend = ''
 if os.path.isdir(backend_src):
