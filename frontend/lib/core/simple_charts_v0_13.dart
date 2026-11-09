@@ -10,40 +10,78 @@ class StatCard extends StatelessWidget {
   final String value;
   final IconData icon;
   final Color? color;
-  const StatCard({super.key, required this.label, required this.value, required this.icon, this.color});
+  const StatCard(
+      {super.key,
+      required this.label,
+      required this.value,
+      required this.icon,
+      this.color});
 
   @override
   Widget build(BuildContext context) {
-    // (v0.8) Gradient-tinted stat tile with a colored icon chip.
-    final c = color ?? Theme.of(context).colorScheme.primary;
+    // Theme-aware stat tile: light mode uses a real light surface instead of
+    // the old hard-coded dark card background.
+    final accent = color ?? Theme.of(context).colorScheme.primary;
+    final light = Theme.of(context).brightness == Brightness.light;
+    final scheme = Theme.of(context).colorScheme;
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [c.withValues(alpha: 0.20), const Color(0xFF16161C)],
+          colors: [
+            accent.withValues(alpha: light ? 0.10 : 0.20),
+            scheme.surface,
+          ],
         ),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: c.withValues(alpha: 0.35)),
+        border: Border.all(
+          color: accent.withValues(alpha: light ? 0.42 : 0.35),
+        ),
+        boxShadow: light
+            ? [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.035),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ]
+            : null,
       ),
       child: Padding(
         padding: const EdgeInsets.all(12),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-          Row(children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: c.withValues(alpha: 0.22),
-                borderRadius: BorderRadius.circular(9),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: light ? 0.12 : 0.22),
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: Icon(icon, size: 15, color: accent),
               ),
-              child: Icon(icon, size: 15, color: c),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  label,
+                  style: Theme.of(context).textTheme.bodySmall,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ]),
+            const SizedBox(height: 8),
+            Text(
+              value,
+              style: Theme.of(context)
+                  .textTheme
+                  .titleLarge
+                  ?.copyWith(fontWeight: FontWeight.w800),
             ),
-            const SizedBox(width: 8),
-            Expanded(child: Text(label, style: Theme.of(context).textTheme.bodySmall, overflow: TextOverflow.ellipsis)),
-          ]),
-          const SizedBox(height: 8),
-          Text(value, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
-        ]),
+          ],
+        ),
       ),
     );
   }
@@ -75,11 +113,18 @@ class SimpleBarChart extends StatelessWidget {
   final List<MapEntry<String, num>> data;
   final String Function(num)? valueFormat;
   final double height;
-  const SimpleBarChart({super.key, required this.title, required this.data, this.valueFormat, this.height = 140});
+  const SimpleBarChart(
+      {super.key,
+      required this.title,
+      required this.data,
+      this.valueFormat,
+      this.height = 140});
 
   @override
   Widget build(BuildContext context) {
-    final fmt = valueFormat ?? (num v) => v == v.roundToDouble() ? '${v.toInt()}' : v.toStringAsFixed(1);
+    final fmt = valueFormat ??
+        (num v) =>
+            v == v.roundToDouble() ? '${v.toInt()}' : v.toStringAsFixed(1);
     final maxV = data.fold<num>(0, (m, e) => e.value > m ? e.value : m);
     final barColor = Theme.of(context).colorScheme.primary;
     return Card(
@@ -89,7 +134,9 @@ class SimpleBarChart extends StatelessWidget {
           Text(title, style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 12),
           if (data.isEmpty)
-            const Padding(padding: EdgeInsets.all(8), child: Text('No data in this period'))
+            const Padding(
+                padding: EdgeInsets.all(8),
+                child: Text('No data in this period'))
           else
             SizedBox(
               height: height,
@@ -100,24 +147,36 @@ class SimpleBarChart extends StatelessWidget {
                   return Expanded(
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 4),
-                      child: Column(mainAxisAlignment: MainAxisAlignment.end, children: [
-                        Text(fmt(e.value), style: Theme.of(context).textTheme.bodySmall),
-                        const SizedBox(height: 2),
-                        Container(
-                          height: (height - 44) * frac + 4,
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.bottomCenter,
-                              end: Alignment.topCenter,
-                              colors: [barColor.withValues(alpha: 0.65), const Color(0xFFF20FB6)],
+                      child: Column(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            Text(fmt(e.value),
+                                style: Theme.of(context).textTheme.bodySmall),
+                            const SizedBox(height: 2),
+                            Container(
+                              height: (height - 44) * frac + 4,
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.bottomCenter,
+                                  end: Alignment.topCenter,
+                                  colors: [
+                                    barColor.withValues(alpha: 0.65),
+                                    const Color(0xFFF20FB6)
+                                  ],
+                                ),
+                                borderRadius: const BorderRadius.vertical(
+                                    top: Radius.circular(4)),
+                              ),
                             ),
-                            borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(e.key, style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 10),
-                            maxLines: 1, overflow: TextOverflow.ellipsis),
-                      ]),
+                            const SizedBox(height: 4),
+                            Text(e.key,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(fontSize: 10),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis),
+                          ]),
                     ),
                   );
                 }).toList(),

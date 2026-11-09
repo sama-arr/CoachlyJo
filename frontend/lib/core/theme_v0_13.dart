@@ -37,7 +37,7 @@ class Brand {
   static const surfaceHigh = Color(0xFF1D1D25);
 
   static const gradient = LinearGradient(
-    colors: [magenta, orange],  // dimmed working tones
+    colors: [magenta, orange], // dimmed working tones
     begin: Alignment.centerLeft,
     end: Alignment.centerRight,
   );
@@ -74,7 +74,8 @@ class Brand {
 /// Builds the CoachlyJo dark theme with the given accent as primary.
 /// member -> magenta, coach -> orange, admin/login -> magenta primary with
 /// orange secondary (the neutral "both" identity).
-ThemeData coachlyTheme({Color accent = Brand.magenta, Brightness brightness = Brightness.dark}) {
+ThemeData coachlyTheme(
+    {Color accent = Brand.magenta, Brightness brightness = Brightness.dark}) {
   if (brightness == Brightness.light) return _coachlyLightTheme(accent);
   final secondary = accent == Brand.orange ? Brand.magenta : Brand.orange;
   final scheme = ColorScheme.dark(
@@ -99,7 +100,8 @@ ThemeData coachlyTheme({Color accent = Brand.magenta, Brightness brightness = Br
       surfaceTintColor: Colors.transparent,
       elevation: 0,
       centerTitle: false,
-      titleTextStyle: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Color(0xFFEDEDF2)),
+      titleTextStyle: TextStyle(
+          fontSize: 20, fontWeight: FontWeight.w800, color: Color(0xFFEDEDF2)),
     ),
     cardTheme: CardThemeData(
       color: Brand.surface,
@@ -115,13 +117,19 @@ ThemeData coachlyTheme({Color accent = Brand.magenta, Brightness brightness = Br
       indicatorColor: accent.withValues(alpha: 0.32),
       surfaceTintColor: Colors.transparent,
       iconTheme: WidgetStateProperty.resolveWith((states) => IconThemeData(
-        color: states.contains(WidgetState.selected) ? accent : const Color(0xFF9A9AA6),
-      )),
+            color: states.contains(WidgetState.selected)
+                ? accent
+                : const Color(0xFF9A9AA6),
+          )),
       labelTextStyle: WidgetStateProperty.resolveWith((states) => TextStyle(
-        fontSize: 12,
-        fontWeight: states.contains(WidgetState.selected) ? FontWeight.w600 : FontWeight.w400,
-        color: states.contains(WidgetState.selected) ? accent : const Color(0xFF9A9AA6),
-      )),
+            fontSize: 12,
+            fontWeight: states.contains(WidgetState.selected)
+                ? FontWeight.w600
+                : FontWeight.w400,
+            color: states.contains(WidgetState.selected)
+                ? accent
+                : const Color(0xFF9A9AA6),
+          )),
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
@@ -133,10 +141,15 @@ ThemeData coachlyTheme({Color accent = Brand.magenta, Brightness brightness = Br
     segmentedButtonTheme: SegmentedButtonThemeData(
       style: ButtonStyle(
         backgroundColor: WidgetStateProperty.resolveWith((states) =>
-            states.contains(WidgetState.selected) ? accent.withValues(alpha: 0.22) : Brand.surface),
+            states.contains(WidgetState.selected)
+                ? accent.withValues(alpha: 0.22)
+                : Brand.surface),
         foregroundColor: WidgetStateProperty.resolveWith((states) =>
-            states.contains(WidgetState.selected) ? Colors.white : const Color(0xFF9A9AA6)),
-        side: WidgetStateProperty.all(const BorderSide(color: Color(0xFF3A3A46))),
+            states.contains(WidgetState.selected)
+                ? Colors.white
+                : const Color(0xFF9A9AA6)),
+        side:
+            WidgetStateProperty.all(const BorderSide(color: Color(0xFF3A3A46))),
       ),
     ),
     chipTheme: ChipThemeData(
@@ -297,14 +310,18 @@ class BrandHeader extends StatelessWidget {
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          Expanded(child: Text(title, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800))),
+          Expanded(
+              child: Text(title,
+                  style: const TextStyle(
+                      fontSize: 22, fontWeight: FontWeight.w800))),
         ]),
         const SizedBox(height: 6),
         const GradientRule(width: 56),
         if (subtitle != null)
           Padding(
             padding: const EdgeInsets.only(top: 6),
-            child: Text(subtitle!, style: const TextStyle(fontSize: 12, color: Color(0xFF9A9AA6))),
+            child: Text(subtitle!,
+                style: const TextStyle(fontSize: 12, color: Color(0xFF9A9AA6))),
           ),
       ]),
     );
@@ -325,7 +342,8 @@ class StatusEdgeCard extends StatelessWidget {
             width: 4,
             decoration: BoxDecoration(
               color: color,
-              borderRadius: const BorderRadius.horizontal(left: Radius.circular(14)),
+              borderRadius:
+                  const BorderRadius.horizontal(left: Radius.circular(14)),
             ),
           ),
           Expanded(child: child),
@@ -356,7 +374,10 @@ class GradientIconBadge extends StatelessWidget {
         gradient: Brand.gradient,
         borderRadius: BorderRadius.circular(size * 0.32),
         boxShadow: [
-          BoxShadow(color: Brand.magenta.withValues(alpha: 0.24), blurRadius: 14, offset: const Offset(0, 4)),
+          BoxShadow(
+              color: Brand.magenta.withValues(alpha: 0.24),
+              blurRadius: 14,
+              offset: const Offset(0, 4)),
         ],
       ),
       child: Icon(icon, color: Colors.white, size: size * 0.52),
@@ -372,9 +393,19 @@ class HeroPanel extends StatelessWidget {
   final IconData? icon;
   final Widget? trailing;
   final Widget? child;
-  const HeroPanel({super.key, required this.title, this.subtitle, this.icon, this.trailing, this.child});
+  const HeroPanel(
+      {super.key,
+      required this.title,
+      this.subtitle,
+      this.icon,
+      this.trailing,
+      this.child});
   @override
   Widget build(BuildContext context) {
+    final c = AppColors.of(context);
+    final magenta = c.isLight ? Brand.magentaLight : Brand.magenta;
+    final orange = c.isLight ? Brand.orangeLight : Brand.orange;
+
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.fromLTRB(12, 12, 12, 8),
@@ -384,33 +415,55 @@ class HeroPanel extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            Brand.magenta.withValues(alpha: 0.22),
-            Brand.orange.withValues(alpha: 0.14),
-            Brand.surface.withValues(alpha: 0.92),
+            magenta.withValues(alpha: c.isLight ? 0.10 : 0.22),
+            orange.withValues(alpha: c.isLight ? 0.07 : 0.14),
+            c.surface.withValues(alpha: c.isLight ? 1.0 : 0.92),
           ],
         ),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Brand.magenta.withValues(alpha: 0.26)),
+        border: Border.all(
+          color: magenta.withValues(alpha: c.isLight ? 0.32 : 0.26),
+        ),
         boxShadow: [
-          BoxShadow(color: Brand.magenta.withValues(alpha: 0.12), blurRadius: 24, offset: const Offset(0, 8)),
+          BoxShadow(
+            color: magenta.withValues(alpha: c.isLight ? 0.07 : 0.12),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
+          ),
         ],
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          if (icon != null) ...[GradientIconBadge(icon: icon!), const SizedBox(width: 12)],
+          if (icon != null) ...[
+            GradientIconBadge(icon: icon!),
+            const SizedBox(width: 12),
+          ],
           Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(title, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800, letterSpacing: -0.2)),
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 19,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.2,
+                  color: c.text,
+                ),
+              ),
               if (subtitle != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 2),
-                  child: Text(subtitle!, style: const TextStyle(fontSize: 12, color: Color(0xFFCFCFDA))),
+                  child: Text(
+                    subtitle!,
+                    style: TextStyle(fontSize: 12, color: c.muted),
+                  ),
                 ),
             ]),
           ),
           if (trailing != null) trailing!,
         ]),
-        if (child != null) Padding(padding: const EdgeInsets.only(top: 14), child: child!),
+        if (child != null)
+          Padding(padding: const EdgeInsets.only(top: 14), child: child!),
       ]),
     );
   }
@@ -420,29 +473,47 @@ class HeroPanel extends StatelessWidget {
 class HeroStat extends StatelessWidget {
   final String value;
   final String label;
+
   /// (v0.10) When the value is numeric, count up to it instead of snapping.
   final bool animate;
-  const HeroStat({super.key, required this.value, required this.label, this.animate = false});
+  const HeroStat(
+      {super.key,
+      required this.value,
+      required this.label,
+      this.animate = false});
   @override
   Widget build(BuildContext context) {
+    final c = AppColors.of(context);
+    final valueStyle = TextStyle(
+      fontSize: 22,
+      fontWeight: FontWeight.w800,
+      color: c.text,
+    );
+
     return Expanded(
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.28),
+          color:
+              c.isLight ? c.surfaceHigh : Colors.black.withValues(alpha: 0.28),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+          border: Border.all(
+            color: c.isLight ? c.border : Colors.white.withValues(alpha: 0.10),
+          ),
         ),
         child: Column(children: [
           if (animate && num.tryParse(value) != null)
             AnimatedCounter(
               value: num.parse(value),
-              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Colors.white),
+              style: valueStyle,
             )
           else
-            Text(value, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Colors.white)),
-          Text(label, textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 11, color: Color(0xFFCFCFDA))),
+            Text(value, style: valueStyle),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 11, color: c.muted),
+          ),
         ]),
       ),
     );
@@ -465,6 +536,7 @@ class BrandCard extends StatelessWidget {
   });
   @override
   Widget build(BuildContext context) {
+    final c = AppColors.of(context);
     final a = accent ?? Theme.of(context).colorScheme.primary;
     return Container(
       margin: margin,
@@ -472,10 +544,25 @@ class BrandCard extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [a.withValues(alpha: 0.14), Brand.surface, Brand.surface],
+          colors: [
+            a.withValues(alpha: c.isLight ? 0.08 : 0.14),
+            c.surface,
+            c.surface,
+          ],
         ),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: a.withValues(alpha: 0.28)),
+        border: Border.all(
+          color: a.withValues(alpha: c.isLight ? 0.36 : 0.28),
+        ),
+        boxShadow: c.isLight
+            ? [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.035),
+                  blurRadius: 14,
+                  offset: const Offset(0, 5),
+                ),
+              ]
+            : null,
       ),
       child: Material(
         color: Colors.transparent,
@@ -496,17 +583,25 @@ class GradientAvatar extends StatelessWidget {
   const GradientAvatar({super.key, required this.initials, this.size = 46});
   @override
   Widget build(BuildContext context) {
+    final c = AppColors.of(context);
     return Container(
       width: size,
       height: size,
       padding: const EdgeInsets.all(2.5),
-      decoration: const BoxDecoration(gradient: Brand.gradient, shape: BoxShape.circle),
+      decoration: BoxDecoration(
+        gradient: Brand.gradientFor(Theme.of(context).brightness),
+        shape: BoxShape.circle,
+      ),
       child: Container(
-        decoration: const BoxDecoration(color: Brand.surface, shape: BoxShape.circle),
+        decoration: BoxDecoration(color: c.surface, shape: BoxShape.circle),
         alignment: Alignment.center,
         child: Text(
           initials,
-          style: TextStyle(fontWeight: FontWeight.w800, fontSize: size * 0.34, color: Colors.white),
+          style: TextStyle(
+            fontWeight: FontWeight.w800,
+            fontSize: size * 0.34,
+            color: c.text,
+          ),
         ),
       ),
     );
@@ -527,7 +622,9 @@ class StatusPill extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: color.withValues(alpha: 0.55)),
       ),
-      child: Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: color)),
+      child: Text(label,
+          style: TextStyle(
+              fontSize: 11, fontWeight: FontWeight.w700, color: color)),
     );
   }
 }
@@ -536,9 +633,11 @@ class StatusPill extends StatelessWidget {
 class EmptyState extends StatelessWidget {
   final IconData icon;
   final String message;
+
   /// (v0.14 item 19) Optional gym illustration instead of a plain icon badge.
   final Widget? art;
-  const EmptyState({super.key, required this.icon, required this.message, this.art});
+  const EmptyState(
+      {super.key, required this.icon, required this.message, this.art});
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -546,10 +645,12 @@ class EmptyState extends StatelessWidget {
       child: Column(children: [
         art ?? GradientIconBadge(icon: icon, size: 56),
         const SizedBox(height: 14),
-        Text(message, textAlign: TextAlign.center,
+        Text(message,
+            textAlign: TextAlign.center,
             style: TextStyle(
                 color: Theme.of(context).brightness == Brightness.light
-                    ? Brand.mutedLight : const Color(0xFF9A9AA6),
+                    ? Brand.mutedLight
+                    : const Color(0xFF9A9AA6),
                 height: 1.4)),
       ]),
     );
@@ -567,7 +668,8 @@ class EmptyState extends StatelessWidget {
 ThemeData _coachlyLightTheme(Color accent) {
   // Map the dark working tones onto their light-mode equivalents.
   final a = accent == Brand.orange ? Brand.orangeLight : Brand.magentaLight;
-  final secondary = accent == Brand.orange ? Brand.magentaLight : Brand.orangeLight;
+  final secondary =
+      accent == Brand.orange ? Brand.magentaLight : Brand.orangeLight;
 
   final scheme = ColorScheme.light(
     primary: a,
@@ -594,7 +696,9 @@ ThemeData _coachlyLightTheme(Color accent) {
       elevation: 0,
       centerTitle: false,
       titleTextStyle: TextStyle(
-          fontSize: 20, fontWeight: FontWeight.w800, color: Brand.onSurfaceLight),
+          fontSize: 20,
+          fontWeight: FontWeight.w800,
+          color: Brand.onSurfaceLight),
       iconTheme: IconThemeData(color: Brand.onSurfaceLight),
     ),
     cardTheme: CardThemeData(
@@ -615,7 +719,9 @@ ThemeData _coachlyLightTheme(Color accent) {
           )),
       labelTextStyle: WidgetStateProperty.resolveWith((states) => TextStyle(
             fontSize: 12,
-            fontWeight: states.contains(WidgetState.selected) ? FontWeight.w600 : FontWeight.w400,
+            fontWeight: states.contains(WidgetState.selected)
+                ? FontWeight.w600
+                : FontWeight.w400,
             color: states.contains(WidgetState.selected) ? a : Brand.mutedLight,
           )),
     ),
@@ -629,10 +735,13 @@ ThemeData _coachlyLightTheme(Color accent) {
     segmentedButtonTheme: SegmentedButtonThemeData(
       style: ButtonStyle(
         backgroundColor: WidgetStateProperty.resolveWith((states) =>
-            states.contains(WidgetState.selected) ? a.withValues(alpha: 0.12) : Brand.surfaceLight),
+            states.contains(WidgetState.selected)
+                ? a.withValues(alpha: 0.12)
+                : Brand.surfaceLight),
         foregroundColor: WidgetStateProperty.resolveWith((states) =>
             states.contains(WidgetState.selected) ? a : Brand.mutedLight),
-        side: WidgetStateProperty.all(const BorderSide(color: Color(0xFFD6D3DE))),
+        side:
+            WidgetStateProperty.all(const BorderSide(color: Color(0xFFD6D3DE))),
       ),
     ),
     chipTheme: ChipThemeData(
@@ -683,7 +792,7 @@ ThemeData _coachlyLightTheme(Color accent) {
 /// mirrored to the account so it follows the user to a new phone.
 class AppTheme extends ChangeNotifier {
   static const _key = 'coachlyjo_theme';
-  String mode = 'dark';   // 'system' | 'light' | 'dark'
+  String mode = 'dark'; // 'system' | 'light' | 'dark'
 
   ThemeMode get themeMode => mode == 'light'
       ? ThemeMode.light
@@ -738,39 +847,51 @@ class AppColors {
   Color get text => isLight ? const Color(0xFF1B1B22) : const Color(0xFFEDEDF2);
 
   /// Secondary text: captions, helper lines, timestamps.
-  Color get muted => isLight ? const Color(0xFF5E5E6E) : const Color(0xFF9A9AA6);
+  Color get muted =>
+      isLight ? const Color(0xFF5E5E6E) : const Color(0xFF9A9AA6);
 
   /// Tertiary text: the faintest readable level.
-  Color get faint => isLight ? const Color(0xFF7C7C8A) : const Color(0xFF6E6E7A);
+  Color get faint =>
+      isLight ? const Color(0xFF7C7C8A) : const Color(0xFF6E6E7A);
 
   /// Body copy inside tinted panels (hero, banners).
-  Color get onPanel => isLight ? const Color(0xFF32323E) : const Color(0xFFCFCFDA);
+  Color get onPanel =>
+      isLight ? const Color(0xFF32323E) : const Color(0xFFCFCFDA);
 
   /// Hairlines and card borders.
-  Color get border => isLight ? const Color(0xFFE2DFE9) : const Color(0xFF23232C);
+  Color get border =>
+      isLight ? const Color(0xFFE2DFE9) : const Color(0xFF23232C);
 
   /// Stronger divider / outline.
-  Color get outline => isLight ? const Color(0xFFCFCBD9) : const Color(0xFF3A3A46);
+  Color get outline =>
+      isLight ? const Color(0xFFCFCBD9) : const Color(0xFF3A3A46);
 
   /// Panel surface behind content.
-  Color get surface => isLight ? const Color(0xFFFFFFFF) : const Color(0xFF15151B);
+  Color get surface =>
+      isLight ? const Color(0xFFFFFFFF) : const Color(0xFF15151B);
 
   /// Raised surface (dialogs, selected rows).
-  Color get surfaceHigh => isLight ? const Color(0xFFF2F0F6) : const Color(0xFF1D1D25);
+  Color get surfaceHigh =>
+      isLight ? const Color(0xFFF2F0F6) : const Color(0xFF1D1D25);
 
   /// Page background.
-  Color get background => isLight ? const Color(0xFFF7F6F9) : const Color(0xFF0A0A0E);
+  Color get background =>
+      isLight ? const Color(0xFFF7F6F9) : const Color(0xFF0A0A0E);
 
   // ---- status colours -------------------------------------------------------
   // The dark palette's mint green (#3ED598) fails contrast on white, which is
   // exactly what testers reported. Light mode uses a deeper green, and
   // `onSuccess` gives text/icons drawn ON a success-tinted chip.
 
-  Color get success => isLight ? const Color(0xFF1B7F53) : const Color(0xFF3ED598);
-  Color get warning => isLight ? const Color(0xFFB85C06) : const Color(0xFFD9700F);
-  Color get danger  => isLight ? const Color(0xFFC62348) : const Color(0xFFFF5470);
-  Color get info    => isLight ? const Color(0xFFB01485) : const Color(0xFFC91E97);
-  Color get neutral => isLight ? const Color(0xFF6B6B7A) : const Color(0xFF6E6E7A);
+  Color get success =>
+      isLight ? const Color(0xFF1B7F53) : const Color(0xFF3ED598);
+  Color get warning =>
+      isLight ? const Color(0xFFB85C06) : const Color(0xFFD9700F);
+  Color get danger =>
+      isLight ? const Color(0xFFC62348) : const Color(0xFFFF5470);
+  Color get info => isLight ? const Color(0xFFB01485) : const Color(0xFFC91E97);
+  Color get neutral =>
+      isLight ? const Color(0xFF6B6B7A) : const Color(0xFF6E6E7A);
 
   /// Readable foreground for text or icons placed on a tinted status chip.
   Color onStatus(Color status) => isLight ? status : status;

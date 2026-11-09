@@ -298,14 +298,17 @@ class _RequestsTabState extends State<_RequestsTab> {
   /// after a configuration fix, so nobody has to cancel and rebook.
   Future<void> _retryLink(Map b) async {
     try {
-      await ApiClient.instance.post('/api/bookings/${b['id']}/retry-meeting-link');
+      await ApiClient.instance
+          .post('/api/bookings/${b['id']}/retry-meeting-link');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text(tr(context, 'Meeting link created.'))));
       }
       _load();
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
     }
   }
 
@@ -317,7 +320,9 @@ class _RequestsTabState extends State<_RequestsTab> {
       builder: (ctx) => AlertDialog(
         title: Text(tr(ctx, 'Add a meeting link')),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
-          Text(tr(ctx, 'Paste your Zoom or Google Meet link. The member is notified straight away.'),
+          Text(
+              tr(ctx,
+                  'Paste your Zoom or Google Meet link. The member is notified straight away.'),
               style: const TextStyle(fontSize: 12)),
           const SizedBox(height: 10),
           TextField(
@@ -328,7 +333,9 @@ class _RequestsTabState extends State<_RequestsTab> {
           ),
         ]),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(tr(ctx, 'Cancel'))),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text(tr(ctx, 'Cancel'))),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
             child: Text(tr(ctx, 'Save')),
@@ -338,14 +345,18 @@ class _RequestsTabState extends State<_RequestsTab> {
     );
     if (url == null || url.isEmpty) return;
     try {
-      await ApiClient.instance.put('/api/bookings/${b['id']}/meeting-link', {'joinUrl': url});
+      await ApiClient.instance
+          .put('/api/bookings/${b['id']}/meeting-link', {'joinUrl': url});
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(tr(context, 'Link saved and the member was notified.'))));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content:
+                Text(tr(context, 'Link saved and the member was notified.'))));
       }
       _load();
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
     }
   }
 
@@ -373,10 +384,7 @@ class _RequestsTabState extends State<_RequestsTab> {
                     : tr(ctx,
                         'The member keeps their class. Cancelling on the same day costs you one session.'),
                 style: TextStyle(
-                    fontSize: 12,
-                    color: sameDay
-                        ? c.warning
-                        : c.muted),
+                    fontSize: 12, color: sameDay ? c.warning : c.muted),
               ),
               const SizedBox(height: 10),
               TextField(
@@ -483,8 +491,7 @@ class _RequestsTabState extends State<_RequestsTab> {
           ...bookings.asMap().entries.map<Widget>((entry) {
             final b = entry.value;
             final status = b['status'];
-            final edge =
-                status == 'pending' ? Brand.orange : c.success;
+            final edge = status == 'pending' ? Brand.orange : c.success;
             return FadeInUp(
                 index: entry.key,
                 child: BrandCard(
@@ -545,14 +552,17 @@ class _RequestsTabState extends State<_RequestsTab> {
                                 padding: const EdgeInsets.only(top: 4),
                                 child: Wrap(spacing: 10, children: [
                                   Text(tr(context, 'No meeting link yet'),
-                                      style: TextStyle(fontSize: 11, color: c.warning)),
+                                      style: TextStyle(
+                                          fontSize: 11, color: c.warning)),
                                   InkWell(
                                     onTap: () => _retryLink(b),
                                     child: Text(tr(context, 'Retry'),
                                         style: TextStyle(
                                             fontSize: 11,
                                             fontWeight: FontWeight.w700,
-                                            color: Theme.of(context).colorScheme.primary)),
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .primary)),
                                   ),
                                   InkWell(
                                     onTap: () => _addOwnLink(b),
@@ -560,7 +570,9 @@ class _RequestsTabState extends State<_RequestsTab> {
                                         style: TextStyle(
                                             fontSize: 11,
                                             fontWeight: FontWeight.w700,
-                                            color: Theme.of(context).colorScheme.primary)),
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .primary)),
                                   ),
                                 ]),
                               ),
@@ -568,8 +580,7 @@ class _RequestsTabState extends State<_RequestsTab> {
                       trailing: status == 'pending'
                           ? Wrap(spacing: 4, children: [
                               IconButton(
-                                  icon: Icon(Icons.check,
-                                      color: c.success),
+                                  icon: Icon(Icons.check, color: c.success),
                                   onPressed: () => _decide(b, true)),
                               // (v0.10 item 2) 3 rejections per package; after that the coach
                               // must accept or cancel with a reason.
@@ -578,15 +589,13 @@ class _RequestsTabState extends State<_RequestsTab> {
                                       0) <
                                   3)
                                 IconButton(
-                                    icon: Icon(Icons.close,
-                                        color: c.danger),
+                                    icon: Icon(Icons.close, color: c.danger),
                                     onPressed: () => _decide(b, false))
                               else
                                 IconButton(
                                   tooltip: tr(context,
                                       'Rejection limit reached — cancel instead'),
-                                  icon: Icon(Icons.event_busy,
-                                      color: c.danger),
+                                  icon: Icon(Icons.event_busy, color: c.danger),
                                   onPressed: () => _coachCancel(b),
                                 ),
                             ])
@@ -1099,8 +1108,7 @@ class _AvailabilityTabState extends State<_AvailabilityTab> {
                       fontWeight: FontWeight.w800, fontSize: 15),
                 ),
                 Text(tr(context, 'Tap an hour to open or close it'),
-                    style: TextStyle(
-                        fontSize: 11, color: c.muted)),
+                    style: TextStyle(fontSize: 11, color: c.muted)),
               ]),
             ),
             IconButton(
@@ -1197,8 +1205,7 @@ class _AvailabilityTabState extends State<_AvailabilityTab> {
                     width: 38,
                     child: Text(
                       '${hour.toString().padLeft(2, '0')}:00',
-                      style: TextStyle(
-                          fontSize: 9, color: c.muted),
+                      style: TextStyle(fontSize: 9, color: c.muted),
                     ),
                   ),
                   ..._days.map((d) => Expanded(child: _cell(d, hour, light))),
@@ -1286,9 +1293,7 @@ class _AvailabilityTabState extends State<_AvailabilityTab> {
             width: 0.5,
           ),
         ),
-        child: booked
-            ? Icon(Icons.lock, size: 10, color: c.success)
-            : null,
+        child: booked ? Icon(Icons.lock, size: 10, color: c.success) : null,
       ),
     );
   }
@@ -1415,11 +1420,24 @@ class _ClientsTabState extends State<_ClientsTab> {
                                             label: Text('$used / $total used'),
                                             visualDensity:
                                                 VisualDensity.compact,
-                                            backgroundColor:
-                                                (r['is_completed'] == true
-                                                        ? Colors.grey
-                                                        : Colors.green)
-                                                    .withValues(alpha: 0.15),
+                                            backgroundColor: c.statusFill(
+                                              r['is_completed'] == true
+                                                  ? c.neutral
+                                                  : c.success,
+                                            ),
+                                            side: BorderSide(
+                                              color: c.statusBorder(
+                                                r['is_completed'] == true
+                                                    ? c.neutral
+                                                    : c.success,
+                                              ),
+                                            ),
+                                            labelStyle: TextStyle(
+                                              color: r['is_completed'] == true
+                                                  ? c.neutral
+                                                  : c.success,
+                                              fontWeight: FontWeight.w600,
+                                            ),
                                           ),
                                         ]),
                                         const SizedBox(height: 8),

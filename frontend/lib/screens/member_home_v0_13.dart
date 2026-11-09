@@ -467,28 +467,29 @@ class _CoachesTabState extends State<_CoachesTab> {
         padding: const EdgeInsets.only(top: 6, bottom: 12),
         itemCount: coaches.length,
         itemBuilder: (_, i) {
-          final c = coaches[i];
-          final rating = double.tryParse('${c['avg_rating']}') ?? 0;
+          final coach = coaches[i];
+          final rating = double.tryParse('${coach['avg_rating']}') ?? 0;
           return FadeInUp(
               index: i,
               child: BrandCard(
                 onTap: () => Navigator.push(
-                    context, fadeSlideRoute(_CoachSessions(coach: c))),
+                    context, fadeSlideRoute(_CoachSessions(coach: coach))),
                 child: Padding(
                   padding: const EdgeInsets.all(12),
                   child: Row(children: [
                     GradientAvatar(
-                        initials: '${c['first_name'][0]}${c['last_name'][0]}'),
+                        initials:
+                            '${coach['first_name'][0]}${coach['last_name'][0]}'),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('${c['first_name']} ${c['last_name']}',
+                            Text('${coach['first_name']} ${coach['last_name']}',
                                 style: const TextStyle(
                                     fontWeight: FontWeight.w700, fontSize: 15)),
                             const SizedBox(height: 2),
-                            Text('${c['nationality']}',
+                            Text('${coach['nationality']}',
                                 style: TextStyle(fontSize: 12, color: c.muted)),
                             const SizedBox(height: 6),
                             Row(children: [
@@ -499,7 +500,7 @@ class _CoachesTabState extends State<_CoachesTab> {
                                   style: const TextStyle(
                                       fontSize: 12,
                                       fontWeight: FontWeight.w600)),
-                              Text('  (${c['rating_count']})',
+                              Text('  (${coach['rating_count']})',
                                   style:
                                       TextStyle(fontSize: 11, color: c.muted)),
                             ]),
